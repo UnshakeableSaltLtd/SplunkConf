@@ -8,6 +8,7 @@
 .svn/
 .hg/
 .bzr/
+.worktrees/
 
 # OS and file system artifacts
 .DS_Store
