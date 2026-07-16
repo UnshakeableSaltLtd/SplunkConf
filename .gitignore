@@ -1,0 +1,61 @@
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.tox/
+.venv/
+venv/
+env/
+.env
+*.pyc
+
+# ─── PowerShell ──────────────────────────────────────────────────────────────
+*.ps1xml
+# PowerShell module build output
+Release/
+
+# ─── Bash / Shell ────────────────────────────────────────────────────────────
+*.sh~
+
+# ─── Splunk ──────────────────────────────────────────────────────────────────
+# Splunk packaged app archives (export when ready to release via GitHub Releases)
+*.spl
+*.tgz
+# Local Splunk configuration overrides (not for source control)
+local/
+local.meta
+
+# ─── Editors and IDEs ────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Secrets / credentials ───────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+.env.*
+
+# ─── Temporary files ─────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.log
+
+# ─── Node (if any tooling is added later) ────────────────────────────────────
+node_modules/
+npm-debug.log*
