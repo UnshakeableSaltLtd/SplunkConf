@@ -1,61 +1,139 @@
-# ─── Python ──────────────────────────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
-.tox/
-.venv/
-venv/
-env/
-.env
-*.pyc
+# gitignore - Standard build for Unshakeable Salt Ltd
+# 
+# Version 1.0.0 Release
+# 2026-07-16 
 
-# ─── PowerShell ──────────────────────────────────────────────────────────────
-*.ps1xml
-# PowerShell module build output
-Release/
+# Version control
+.git/
+.svn/
+.hg/
+.bzr/
 
-# ─── Bash / Shell ────────────────────────────────────────────────────────────
-*.sh~
-
-# ─── Splunk ──────────────────────────────────────────────────────────────────
-# Splunk packaged app archives (export when ready to release via GitHub Releases)
-*.spl
-*.tgz
-# Local Splunk configuration overrides (not for source control)
-local/
-local.meta
-
-# ─── Editors and IDEs ────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# OS and file system artifacts
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
 
-# ─── Secrets / credentials ───────────────────────────────────────────────────
+# Secrets and sensitive data
+.env
+.env.*
 *.pem
 *.key
 *.p12
 *.pfx
 secrets.json
 credentials.json
-.env.*
+pass-ansible.txt
+.vault-password
+*.retry
 
-# ─── Temporary files ─────────────────────────────────────────────────────────
+# Python, pip, and scripting artifacts
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+*.egg
+*.egg-info/
+.Python
+.eggs/
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+__pypackages__/
+*.mo
+*.pot
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+.scrapy
+target/
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+.spyderproject
+.spyproject
+.ropeproject
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+*.ps1xml
+Release/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs, temporary files, and generated output
+*.log
+npm-debug.log*
 tmp/
 temp/
 *.tmp
 *.bak
-*.log
 
-# ─── Node (if any tooling is added later) ────────────────────────────────────
+# Node tooling
 node_modules/
-npm-debug.log*
+
+# Misc generated files and stuff we just dont want you to see
+*.so
+*.sage.py
+/site
+scratchpad/
