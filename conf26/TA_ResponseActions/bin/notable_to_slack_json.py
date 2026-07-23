@@ -254,6 +254,40 @@ def slack_api_post(url, token, data=None, json_body=None):
         return json.loads(resp.read().decode("utf-8"))
 
 
+def slack_api_get(url, token, params):
+    headers = {"Authorization": f"Bearer {token}"}
+    full_url = f"{url}?{urllib.parse.urlencode(params)}"
+    req = urllib.request.Request(full_url, headers=headers, method="GET")
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+# ----------------------------------------------------------------------
+# Resolve the channel/ts of the message this file was shared into, so
+# bin/slack_hec_bridge.py (Phase 2/3 - see ../SEC1215/ARCHITECTURE.md) knows
+# which Slack thread to poll with conversations.replies for the agentic AI's
+# verdict. Only meaningful for file_upload delivery: webhook delivery has no
+# bot token and no conversations.read scope, so there is nothing to read a
+# reply back with - see README.md's "Known limitation" note.
+# https://api.slack.com/methods/files.info
+# ----------------------------------------------------------------------
+def get_file_share_ts(token, file_id, channel):
+    try:
+        resp = slack_api_get("https://slack.com/api/files.info", token, {"file": file_id})
+    except Exception:
+        log.exception("files.info lookup failed for file_id=%s; bridge won't be able to poll this notable", file_id)
+        return None
+    if not resp.get("ok"):
+        log.warning("files.info returned not-ok for file_id=%s: %s", file_id, resp)
+        return None
+    shares = (resp.get("file") or {}).get("shares") or {}
+    for visibility in ("public", "private"):
+        entries = (shares.get(visibility) or {}).get(channel)
+        if entries:
+            return entries[0].get("ts")
+    return None
+
+
 def upload_json_to_slack(token, channel, filename, json_bytes, comment):
     # Step 1: request an upload URL (files.upload is retired as of 2025-11-12)
     step1 = slack_api_post(
@@ -285,7 +319,7 @@ def upload_json_to_slack(token, channel, filename, json_bytes, comment):
     )
     if not step3.get("ok"):
         raise RuntimeError(f"files.completeUploadExternal failed: {step3}")
-    return step3
+    return step3, file_id
 
 
 # ----------------------------------------------------------------------
@@ -414,6 +448,14 @@ def main():
             except Exception:
                 log.exception("modaction.update() failed for row=%d", i)
 
+        # Populated below for file_upload deliveries only - webhook has no bot
+        # token / conversations.read scope, so slack_hec_bridge.py (Phase 2/3)
+        # has nothing to poll and awaiting_ai_response stays 0. See the
+        # "Known limitation" note in README.md.
+        slack_permalink = ""
+        slack_thread_ts = ""
+        awaiting_ai_response = 0
+
         try:
             if delivery == "webhook":
                 webhook_url = cfg.get("slack_webhook_url")
@@ -432,7 +474,20 @@ def main():
                     f"Notable - {job.get('search_name')}\n"
                     f"Event time: {format_event_time(row, envelope)}"
                 )
-                upload_json_to_slack(token, channel, filename, json_bytes, comment)
+                upload_resp, file_id = upload_json_to_slack(token, channel, filename, json_bytes, comment)
+                uploaded_files = upload_resp.get("files") or []
+                if uploaded_files:
+                    slack_permalink = uploaded_files[0].get("permalink", "") or ""
+                thread_ts = get_file_share_ts(token, file_id, channel)
+                if thread_ts:
+                    slack_thread_ts = thread_ts
+                    awaiting_ai_response = 1
+                else:
+                    log.warning(
+                        "Could not resolve Slack thread ts for sid=%s row=%d; "
+                        "slack_hec_bridge.py will not be able to poll this notable for a reply",
+                        job.get("sid"), i,
+                    )
             log.info("Delivered notable sid=%s row=%d to Slack via %s", job.get("sid"), i, delivery)
 
             # 1) Native Adaptive Response panel status for this notable.
@@ -490,12 +545,20 @@ def main():
                             "sent_at": envelope["sent_at"],
                             "delivery_method": delivery,
                             "slack_channel": cfg.get("slack_channel") or "",
-                            "slack_permalink": "",
+                            "slack_permalink": slack_permalink,
+                            "slack_thread_ts": slack_thread_ts,
+                            "awaiting_ai_response": awaiting_ai_response,
                             "additional_fields": json.dumps(
                                 envelope.get("additional_fields"), default=str
                             ),
                             "status": "success",
                             "error": "",
+                            "risk_object": "",
+                            "risk_object_type": "",
+                            "risk_score": "",
+                            "risk_message": "",
+                            "hec_sent": 0,
+                            "notable_enriched_at": "",
                         },
                     )
                 except Exception:
@@ -529,12 +592,20 @@ def main():
                             "sent_at": envelope.get("sent_at", ""),
                             "delivery_method": delivery,
                             "slack_channel": cfg.get("slack_channel") or "",
-                            "slack_permalink": "",
+                            "slack_permalink": slack_permalink,
+                            "slack_thread_ts": slack_thread_ts,
+                            "awaiting_ai_response": awaiting_ai_response,
                             "additional_fields": json.dumps(
                                 envelope.get("additional_fields"), default=str
                             ),
                             "status": "failure",
                             "error": str(sys.exc_info()[1]),
+                            "risk_object": "",
+                            "risk_object_type": "",
+                            "risk_score": "",
+                            "risk_message": "",
+                            "hec_sent": 0,
+                            "notable_enriched_at": "",
                         },
                     )
                 except Exception:

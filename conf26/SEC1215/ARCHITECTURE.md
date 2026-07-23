@@ -12,13 +12,15 @@ referenced in Takeaway 2.
 ```
 ES Correlation Search
    └─ triggers Notable/Risk event
-        └─ Adaptive Response Action: TA_ResponseActions (SHIPPED — v1.3.0)
+        └─ Adaptive Response Action: TA_ResponseActions (SHIPPED — v1.3.0/1.3.1)
              └─ full CIM/risk notable as JSON -> Slack (file_upload or webhook)
-                  + a "perplexity_ask" block of standing checks
-                  (repo check / user check / source IP check)
+                  + a "perplexity_ask" block of standing checks + strict
+                  JSON reply_format (repo check / user check / source IP
+                  check, reply as {risk_score, risk_object, ...})
                        └─ Agentic AI (Perplexity) reads the JSON, answers the
                           standing checks, returns a verdict
-                            └─ Slack -> HEC Bridge (NEXT TO BUILD)
+                            └─ Slack -> HEC Bridge (SHIPPED — v1.3.1,
+                               bin/slack_hec_bridge.py)
                                  └─ maps the AI's verdict into CIM-compliant
                                     fields and re-injects via Splunk's own
                                     APIs — HEC for the risk index, REST for
@@ -43,7 +45,7 @@ practice: Splunk gives you the Adaptive Response framework, `cim_actions.py`'s
 `ModularAction` for native panel reporting, and the CIM field set for free —
 the delivery shaping and the standing-question payload are what you build.
 
-## Phase 2 — the AI's answer becomes a CIM-compliant event (next to build)
+## Phase 2 — the AI's answer becomes a CIM-compliant event (shipped, v1.3.1)
 
 The gap the talk calls out: an LLM's reply is prose, or at best loose JSON.
 Splunk's Risk Analysis framework and Incident Review don't care what an LLM
@@ -57,8 +59,14 @@ for it ([Risk Analysis framework](https://dev.splunk.com/enterprise/docs/devtool
 customise the human-readable reason for the score
 ([CIM Risk data model reference](https://dev.splunk.com/view/enterprise-security/SP-CAAAFBM)).
 
-So the **Slack → HEC bridge** is the component that turns the agentic AI's
-free-text verdict into that shape before anything is written back:
+So the **Slack → HEC bridge** (`bin/slack_hec_bridge.py`, shipped in v1.3.1) is
+the component that turns the agentic AI's free-text verdict into that shape
+before anything is written back. Concretely, it's a classic Splunk scripted
+input (`default/inputs.conf`) that polls the `notable_slack_enrichment` KV
+store every 60 seconds for records `TA_ResponseActions` has flagged
+`awaiting_ai_response=1`, reads the Slack thread with `conversations.replies`,
+and parses the reply against the strict JSON schema now pinned into
+`alert_actions.conf`'s `perplexity_ask.reply_format`:
 
 | AI verdict concept | CIM Risk field it becomes |
 |---|---|
@@ -72,7 +80,7 @@ JSON — it's the difference between "the AI said something" and "Splunk can
 correlate, score, and dashboard what the AI said" alongside everything else
 already flowing through Enterprise Security.
 
-## Phase 3 — leveraging Splunk's own APIs so it lands with zero human touch
+## Phase 3 — leveraging Splunk's own APIs so it lands with zero human touch (shipped, v1.3.1)
 
 Once the verdict is CIM-shaped, the bridge uses two existing Splunk APIs —
 not a bespoke store — to put it exactly where a SOC analyst already looks,
@@ -117,12 +125,50 @@ continuous loop, closed without a human in the middle of it.
   the first version of this pipeline treated the AI's Slack reply as "done"
   once posted — it took a second pass to realise *posted to Slack* isn't
   *usable by Splunk* until it's reshaped into CIM fields and pushed back
-  through HEC/REST, not left for an analyst to translate by hand.
+  through HEC/REST, not left for an analyst to translate by hand. Building
+  the v1.3.1 bridge surfaced several more pitfalls worth calling out
+  explicitly for anyone repeating this pattern:
+
+  1. **The Notable Event API can't carry new structured fields.**
+     `/services/notable_update` only accepts `comment`/`status`/`urgency`/
+     `newOwner`/`disposition`
+     ([API reference](https://help.splunk.com/en/splunk-enterprise-security-7/api-reference/7.3/notable-event-endpoints/notable-event-api-reference)) —
+     there is no REST call that attaches a new indexed field to an existing
+     notable after the fact. "Notable enrichment" in Phase 3 therefore has to
+     reuse the KV-store + custom-drilldown pattern `TA_ResponseActions`
+     already built in v1.2.0 (structured fields, rendered via a dashboard)
+     and fall back to a plain-text comment for anything visible directly in
+     Incident Review — it is not a new REST write capability, however much
+     the talk's narrative might make it sound like one.
+  2. **Webhook delivery silently can't be bridged.** Slack's Incoming
+     Webhooks carry no bot token and no `conversations.read` scope, so
+     there is no API call that reads a reply back out of a webhook-posted
+     message. A correlation search wired to `delivery_method=webhook`
+     still delivers to Slack fine — it just never gets a Phase 2/3 verdict,
+     and nothing errors to tell you that. This only surfaces if you notice
+     `awaiting_ai_response` never got set to `1` on that record.
+  3. **LLM reply-format drift.** Free-text answers to the original
+     `perplexity_ask` checks were unparseable — the fix was to make the
+     required JSON shape part of the *prompt itself*
+     (`perplexity_ask.reply_format` in `alert_actions.conf`), and to have
+     `slack_hec_bridge.py` log-and-skip (not crash) on any reply that still
+     doesn't parse, leaving the KV record `awaiting_ai_response=1` so the
+     raw reply stays visible for a human to check rather than being lost.
+  4. **Modular input scheme overhead wasn't worth it for an internal
+     poller.** `slack_hec_bridge.py` is registered as a plain classic
+     scripted input (`[script://...]` in `inputs.conf`), not a full
+     `splunklib.modularinput` scheme. The trade-off: Splunk Web doesn't
+     auto-generate a settings page for its custom keys (`risk_index`,
+     `hec_url`, the credential realms) — they're self-parsed out of
+     `inputs.conf` via `configparser` instead, and must be edited by hand
+     in `local/inputs.conf`. Fine for a single internal component; would be
+     the wrong call for anything meant to be configured by someone other
+     than the app's own maintainer.
 
 ## Status
 
 | Phase | Component | Status |
 |---|---|---|
-| 1 | `TA_ResponseActions` — notable → Slack JSON + `perplexity_ask` | Shipped (v1.3.0) |
-| 2 | Slack → HEC bridge — AI verdict → CIM Risk fields | Narrative defined here; build tracked for a future `TA_ResponseActions` minor bump or a new companion app |
-| 3 | HEC → risk index, REST → notable enrichment | Narrative defined here; reuses the `sid`/`rid`/`event_id` correlation keys already established by `TA_ResponseActions` v1.2.0's KV-store enrichment |
+| 1 | `TA_ResponseActions` — notable → Slack JSON + `perplexity_ask` | Shipped (v1.3.0/1.3.1) |
+| 2 | Slack → HEC bridge — AI verdict → CIM Risk fields | Shipped (v1.3.1) — `bin/slack_hec_bridge.py` |
+| 3 | HEC → risk index, REST → notable enrichment | Shipped (v1.3.1) — reuses the `sid`/`rid`/`event_id` correlation keys already established by `TA_ResponseActions` v1.2.0's KV-store enrichment |
