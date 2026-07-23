@@ -1,4 +1,13 @@
 [notable_to_slack_json]
+param._cam = <string> JSON object describing this action's Common Action Model (CAM) classification -
+  category, task, subject, technology, supports_adhoc, and drilldown_uri. drilldown_uri points the
+  action's row in the notable's Adaptive Responses panel at our custom KV-store-backed dashboard
+  (default/data/ui/views/notable_slack_enrichment_drilldown.xml) instead of the default "search for
+  result events" link. Splunk_SA_CIM's own README/alert_actions.conf.spec documents param._cam as a
+  standard adaptive-response key, so Splunk Enterprise itself does not require it to be redeclared
+  here - it is included for local documentation completeness and for tooling (e.g. some conf linters)
+  that only resolves specs on a per-app basis and does not merge in specs from other installed apps.
+
 param.delivery_method = <string> "file_upload" or "webhook". file_upload sends the complete JSON with
   no size cap via a Slack bot token; webhook is quicker to set up but truncates large payloads.
   Default: file_upload

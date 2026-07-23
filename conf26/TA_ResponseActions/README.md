@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Slack (Full JSON)
-**Version:** 1.3.1
+**Version:** 1.3.2
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -146,10 +146,37 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 | `default/inputs.conf` | Registers `slack_hec_bridge.py` as a classic scripted input; custom keys are self-parsed, not delivered by splunkd |
 | `README/inputs.conf.spec` | Documentation-only spec for the `inputs.conf` custom keys |
 | `metadata/default.meta` | Object ACLs |
+| `static/appIcon.png`, `appIconAlt.png`, `appIcon_2x.png`, `appIconAlt_2x.png`, `appLogo.png`, `appLogo_2x.png` | App-level icon/logo set (App Manager convention), copied from [`splunk_build`'s `org_template`](https://github.com/UnshakeableSaltLtd/splunk_build/tree/main/library/unshakeablesalt/org_template/static) |
+| `appserver/static/appIcon.png` | Icon referenced by `alert_actions.conf`'s `icon_path = appIcon.png` for the action's UI icon in Incident Review |
 
 Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` and `$SPLUNK_HOME/var/log/splunk/slack_hec_bridge.log`
 
 ## Release Notes
+
+### 1.3.2
+
+- Fixed `README/alert_actions.conf.spec` for `[notable_to_slack_json]`: added the missing
+  `param._cam` documentation line. Splunk's own dev docs say `param._cam` is inherited from
+  `Splunk_SA_CIM`'s spec and doesn't need redeclaring, but any tooling that only resolves specs
+  on a per-app basis (rather than merging in other installed apps' specs) will otherwise flag it.
+- Added app icon/logo assets (`static/appIcon.png`, `appIconAlt.png`, `appIcon_2x.png`,
+  `appIconAlt_2x.png`, `appLogo.png`, `appLogo_2x.png`) plus `appserver/static/appIcon.png`,
+  reused from [`splunk_build`'s `org_template`](https://github.com/UnshakeableSaltLtd/splunk_build/tree/main/library/unshakeablesalt/org_template/static).
+  This satisfies `alert_actions.conf`'s `icon_path = appIcon.png` setting, which per Splunk's own
+  spec "refers to the `appserver/static` directory in the app that the alert action is defined in."
+- **Note on the VS Code Splunk extension linter:** the official
+  [Visual Studio Code Extension for Splunk](https://github.com/splunk/vscode-extension-splunk) only
+  validates `.conf` files against its own bundled global spec files (or a single folder set via the
+  `splunk.spec.FilePath` setting) — it never reads an app's own `README/*.conf.spec` file
+  (confirmed in `extension.js`'s `getSpecFilePath()`, and tracked as a known gap for `inputs.conf` in
+  [issue #59](https://github.com/splunk/vscode-extension-splunk/issues/59), which applies to every
+  conf type). That means every custom `param.*` key on a custom alert action — including
+  `param._cam` — will always show as "Invalid key in stanza" in that extension, regardless of what's
+  declared in this app's spec file. This is a known limitation of the extension, not a defect in this
+  app; these specific warnings are safe to ignore. (Community reports of the same `param._cam`
+  warning, e.g. [Splunk Add-on Builder thread](https://community.splunk.com/t5/All-Apps-and-Add-ons/Splunk-Add-on-Builder-How-to-resolve-quot-Invalid-key-in-stanza/m-p/215990)
+  and [VictorOps app thread](https://community.splunk.com/t5/Splunk-On-Call/Invalid-key-in-stanza/m-p/477090),
+  confirm the same root cause.)
 
 ### 1.3.1
 
