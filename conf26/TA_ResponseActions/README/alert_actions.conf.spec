@@ -32,3 +32,9 @@ param.write_back_comment = <bool> Whether to POST a comment back to the triggeri
   (via /services/notable_update, matched by event_id) after a successful Slack send, so the
   collected data appears in that notable's own Activity timeline in Incident Review. Requires
   the action to be invoked in a notable context (event_id present in the result row). Default: 1
+
+param.write_back_kvstore = <bool> Whether to persist a structured record (event_id, delivery
+  details, additional_fields JSON, status/error) to the notable_slack_enrichment KV store
+  collection, keyed by this invocation's sid/rid. Surfaced to analysts via the drilldown_uri
+  configured in param._cam - use this when you need real structured fields next to the notable,
+  not just comment text. Default: 1

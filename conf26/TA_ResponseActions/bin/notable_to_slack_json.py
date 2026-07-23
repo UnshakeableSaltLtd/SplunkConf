@@ -195,6 +195,34 @@ def post_comment_to_notable(server_uri, session_key, event_id, comment):
 
 
 # ----------------------------------------------------------------------
+# Write a STRUCTURED enrichment record to the notable_slack_enrichment KV
+# store collection, keyed by this AR invocation's sid/rid (the only tokens
+# Incident Review's custom drilldown_uri supports - event_id is NOT one of
+# them). Analysts reach this via the drilldown configured in param._cam,
+# rendered by default/data/ui/views/notable_slack_enrichment_drilldown.xml.
+# https://dev.splunk.com/view/SP-CAAAEZG (KV store REST write)
+# ----------------------------------------------------------------------
+def write_kvstore_record(server_uri, session_key, app, record):
+    if not server_uri or not session_key:
+        raise RuntimeError("server_uri/session_key unavailable; cannot write to KV store")
+    url = f"{server_uri}/servicesNS/nobody/{app}/storage/collections/data/notable_slack_enrichment"
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    body = json.dumps(record).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={"Authorization": f"Splunk {session_key}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    log.info("Wrote KV store enrichment record _key=%s", result.get("_key"))
+    return result
+
+
+# ----------------------------------------------------------------------
 # Slack delivery: file_upload (recommended - no size limit)
 # ----------------------------------------------------------------------
 def slack_api_post(url, token, data=None, json_body=None):
@@ -319,6 +347,8 @@ def main():
 
     cfg = payload.get("configuration", {}) or {}
     write_back_comment = (cfg.get("write_back_comment", "1")) in ("1", "true", "True")
+    write_back_kvstore = (cfg.get("write_back_kvstore", "1")) in ("1", "true", "True")
+    kvstore_app = payload.get("app", "TA_ResponseActions") or "TA_ResponseActions"
     job = {
         "search_name": payload.get("search_name"),
         "sid": payload.get("sid"),
@@ -428,6 +458,37 @@ def main():
                         "skipping notable comment write-back",
                         i,
                     )
+
+            # 3) Structured enrichment record in the KV store, keyed by
+            #    sid/rid so it can be reached via the drilldown_uri custom
+            #    view - gives analysts real fields, not just comment text.
+            if write_back_kvstore:
+                try:
+                    write_kvstore_record(
+                        payload.get("server_uri"),
+                        payload.get("session_key"),
+                        kvstore_app,
+                        {
+                            "sid": job.get("sid") or "",
+                            "rid": row.get("rid", str(i)),
+                            "orig_sid": row.get("orig_sid", ""),
+                            "orig_rid": row.get("orig_rid", ""),
+                            "event_id": row.get("event_id", ""),
+                            "sent_at": envelope["sent_at"],
+                            "delivery_method": delivery,
+                            "slack_channel": cfg.get("slack_channel") or "",
+                            "slack_permalink": "",
+                            "additional_fields": json.dumps(
+                                envelope.get("additional_fields"), default=str
+                            ),
+                            "status": "success",
+                            "error": "",
+                        },
+                    )
+                except Exception:
+                    log.exception(
+                        "Failed to write KV store enrichment record for row=%d", i
+                    )
         except Exception:
             log.exception("Failed to deliver notable sid=%s row=%d to Slack", job.get("sid"), i)
             failures += 1
@@ -440,6 +501,33 @@ def main():
                     )
                 except Exception:
                     log.exception("modaction.message() (failure) failed for row=%d", i)
+            if write_back_kvstore:
+                try:
+                    write_kvstore_record(
+                        payload.get("server_uri"),
+                        payload.get("session_key"),
+                        kvstore_app,
+                        {
+                            "sid": job.get("sid") or "",
+                            "rid": row.get("rid", str(i)),
+                            "orig_sid": row.get("orig_sid", ""),
+                            "orig_rid": row.get("orig_rid", ""),
+                            "event_id": row.get("event_id", ""),
+                            "sent_at": envelope.get("sent_at", ""),
+                            "delivery_method": delivery,
+                            "slack_channel": cfg.get("slack_channel") or "",
+                            "slack_permalink": "",
+                            "additional_fields": json.dumps(
+                                envelope.get("additional_fields"), default=str
+                            ),
+                            "status": "failure",
+                            "error": str(sys.exc_info()[1]),
+                        },
+                    )
+                except Exception:
+                    log.exception(
+                        "Failed to write KV store failure record for row=%d", i
+                    )
 
     sys.exit(0 if failures == 0 else 3)
 

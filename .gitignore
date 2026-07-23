@@ -83,6 +83,9 @@ coverage.xml
 .pytest_cache/
 *.manifest
 *.spec
+# Splunk app config spec files (e.g. README/alert_actions.conf.spec) are a
+# Splunk convention, not PyInstaller build artifacts - keep them tracked.
+!**/README/*.spec
 pip-log.txt
 pip-delete-this-directory.txt
 .venv/

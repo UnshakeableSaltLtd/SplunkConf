@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Slack (Full JSON)
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -44,10 +44,36 @@ sees the result alongside the rest of the event, without leaving Incident Review
    notable's own Activity timeline, so any analyst who later opens the notable sees it directly —
    this only works when the action runs in a notable context (i.e. `event_id` is present on the
    triggering row) and only supports comment text, not new structured/columnar fields.
+3. **KV store enrichment + custom drilldown (`param.write_back_kvstore`, default on)** — see
+   below. Gives analysts genuinely structured fields, not just comment text.
 
-If you need genuinely new structured fields visible as columns in Incident Review (rather than
-comment text), that requires a separate pattern — e.g. a lookup/KV store keyed by `event_id`
-joined into a custom drilldown panel — which is out of scope for this action.
+### KV store enrichment / custom drilldown
+
+`/services/notable_update` only supports `comment`/`status`/`urgency`/`newOwner`/`disposition` —
+no arbitrary new fields. To surface real structured data (delivery status, Slack channel, the
+exact `additional_fields` sent, error detail on failure) next to the notable, the action also:
+
+1. Writes a record to the **`notable_slack_enrichment`** KV store collection
+   (`default/collections.conf`) via `POST /servicesNS/nobody/<app>/storage/collections/data/...`,
+   keyed by **this invocation's `sid`/`rid`** — not `event_id`. That's because Incident Review's
+   custom `drilldown_uri` (in `param._cam`) only supports the tokens `$sid$`, `$rid$`, `$time$`,
+   `$earliest$`, `$latest$`, `$action_name$` — `event_id` isn't one of them
+   ([reference](https://community.splunk.com/t5/Splunk-Search/How-to-change-Custom-Adaptive-response-action-succ-td-p/310960)).
+   `event_id`/`orig_sid`/`orig_rid` are still stored on the record for ad hoc `event_id` lookups.
+2. Declares `param._cam = {"supports_adhoc": true, "drilldown_uri": "notable_slack_enrichment_drilldown?form.sid=$sid$&form.rid=$rid$", ...}`
+   in `alert_actions.conf`. `supports_adhoc` is also what makes the action appear under
+   Incident Review's **Run Adaptive Response Actions** ad hoc menu at all
+   ([reference](https://community.splunk.com/t5/Splunk-Enterprise-Security/The-quot-Run-Adaptive-Response-Actions-quot-is-not-listing-all/m-p/472638)).
+3. Ships a Simple XML view, `default/data/ui/views/notable_slack_enrichment_drilldown.xml`,
+   that takes `sid`/`rid` from the drilldown URL and runs
+   `| inputlookup notable_slack_enrichment_lookup where sid="$sid$" AND rid="$rid$"` (lookup
+   defined in `default/transforms.conf`) to render the record as a table.
+
+From a notable's Adaptive Responses panel, click through this action's entry and you land on
+that dashboard with the structured record already loaded — no re-typing tokens.
+
+Adjust `metadata/default.meta`'s `[collections/notable_slack_enrichment]` write ACL if the role
+that invokes the action (correlation search owner, or an analyst running it ad hoc) isn't `admin`.
 
 ## Installation
 
@@ -69,14 +95,30 @@ joined into a custom drilldown panel — which is out of scope for this action.
 
 | Path | Description |
 |---|---|
-| `default/alert_actions.conf` | Registers the action, delivery/payload parameters |
+| `default/alert_actions.conf` | Registers the action, delivery/payload parameters, `param._cam` (adhoc + drilldown) |
 | `README/alert_actions.conf.spec` | Splunk config spec — drives the auto-generated config UI |
-| `bin/notable_to_slack_json.py` | Action logic — build payload, vault lookup, Slack delivery, Adaptive Response panel status, notable comment write-back |
+| `bin/notable_to_slack_json.py` | Action logic — build payload, vault lookup, Slack delivery, Adaptive Response panel status, notable comment write-back, KV store enrichment write |
+| `default/collections.conf` | `notable_slack_enrichment` KV store collection schema |
+| `default/transforms.conf` | `notable_slack_enrichment_lookup` — lookup wrapper for reading the collection via SPL |
+| `default/data/ui/views/notable_slack_enrichment_drilldown.xml` | Dashboard rendering the enrichment record for a given `sid`/`rid` |
 | `metadata/default.meta` | Object ACLs |
 
 Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
 
 ## Release Notes
+
+### 1.2.0
+
+- Added `param.write_back_kvstore` — persists a structured enrichment record (event_id, delivery
+  method, Slack channel, `additional_fields` JSON, status/error) to a new `notable_slack_enrichment`
+  KV store collection, keyed by the AR invocation's `sid`/`rid`.
+- Added `param._cam` to `alert_actions.conf`: `supports_adhoc: true` (makes the action available
+  under Incident Review's "Run Adaptive Response Actions" ad hoc menu) and a `drilldown_uri`
+  pointing at a new custom dashboard.
+- Added `default/collections.conf`, `default/transforms.conf`, and
+  `default/data/ui/views/notable_slack_enrichment_drilldown.xml` for the KV store lookup + view.
+- Fixed a repo-level `.gitignore` bug (a leftover PyInstaller `*.spec` rule) that was silently
+  excluding Splunk's `.conf.spec` convention files from commits.
 
 ### 1.1.0
 
