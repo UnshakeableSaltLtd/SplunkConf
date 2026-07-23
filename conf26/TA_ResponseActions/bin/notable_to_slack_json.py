@@ -223,6 +223,22 @@ def write_kvstore_record(server_uri, session_key, app, record):
 
 
 # ----------------------------------------------------------------------
+# Human-readable timestamp for when the underlying event/notable actually
+# occurred, as opposed to envelope['sent_at'] (when this action ran).
+# Splunk notable rows carry the event time in _time (epoch seconds); fall
+# back to the row's own 'time' field, then to sent_at if neither is present.
+# ----------------------------------------------------------------------
+def format_event_time(row, envelope):
+    raw_time = row.get("_time") or row.get("time")
+    if raw_time:
+        try:
+            return time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(float(raw_time)))
+        except (TypeError, ValueError):
+            return str(raw_time)
+    return envelope.get("sent_at", "")
+
+
+# ----------------------------------------------------------------------
 # Slack delivery: file_upload (recommended - no size limit)
 # ----------------------------------------------------------------------
 def slack_api_post(url, token, data=None, json_body=None):
@@ -416,8 +432,8 @@ def main():
                     )
                 filename = f"notable_{job.get('sid', 'na')}_{i}.json"
                 comment = (
-                    f":rotating_light: *Notable:* {job.get('search_name')}\n"
-                    f"*SID:* {job.get('sid')}  |  <{job.get('results_link')}|Open in Splunk>"
+                    f"Notable - {job.get('search_name')}\n"
+                    f"Event time: {format_event_time(row, envelope)}"
                 )
                 upload_json_to_slack(token, channel, filename, json_bytes, comment)
             log.info("Delivered notable sid=%s row=%d to Slack via %s", job.get("sid"), i, delivery)
