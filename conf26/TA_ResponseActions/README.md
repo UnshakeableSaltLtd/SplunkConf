@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Slack (Full JSON)
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -106,6 +106,17 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
 
 ## Release Notes
+
+### 1.3.0
+
+- `param.additional_fields` now ships a default `perplexity_ask` block with three standing checks
+  run against every notable by the Slack->HEC bridge automation: is `$result.repo$` a repo we
+  commonly see for this kind of finding, is `$result.user$` an expected/authorized user, and is
+  `$result.src$` a low-threat source IP. Override or extend per correlation search as needed.
+- Slack `initial_comment`/webhook summary text (both delivery methods) now reads
+  `Notable - <search_name>` / `Event time: <event time>` ahead of the JSON payload, instead of the
+  old `:rotating_light:`/SID-only line. Event time is read from the notable's own `_time` field
+  where available, falling back to the send timestamp.
 
 ### 1.2.0
 
