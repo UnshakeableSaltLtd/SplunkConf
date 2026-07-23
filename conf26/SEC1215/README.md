@@ -37,7 +37,7 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full diagram, field mapping, 
 | File / Folder | Description |
 |---|---|
 | `ARCHITECTURE.md` | The three-phase agentic loop narrative behind this talk |
-| `slides/` | Presentation slides (PDF / PPTX) |
+| `slides/` | Presentation source, one Markdown file per slide (`01-title.md` … `15-thank-you-resources.md`), each with a `## Speakers Notes` section |
 | `demos/` | Demo scripts and supporting code |
 | `images/` | Diagrams and screenshots |
 
