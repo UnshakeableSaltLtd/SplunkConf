@@ -291,21 +291,18 @@ def upload_json_to_slack(token, channel, filename, json_bytes, comment):
 # ----------------------------------------------------------------------
 # Slack delivery: webhook (quick start, truncates large payloads)
 # ----------------------------------------------------------------------
-def post_webhook_summary(webhook_url, envelope, max_chars=3500):
+def post_webhook_summary(webhook_url, envelope, row, max_chars=3500):
     text_json = json.dumps(envelope, indent=2, default=str)
     truncated = len(text_json) > max_chars
     snippet = text_json[:max_chars]
-    n = envelope.get("notable", {})
     blocks = [
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    f":rotating_light: *New Notable:* {envelope.get('search_name', '')}\n"
-                    f"*Severity/Urgency:* {n.get('urgency', n.get('severity', 'n/a'))}  "
-                    f"*SID:* {envelope.get('sid', '')}\n"
-                    f"<{envelope.get('results_link', '')}|Open in Splunk>"
+                    f"*Notable - {envelope.get('search_name', '')}*\n"
+                    f"Event time: {format_event_time(row, envelope)}"
                 ),
             },
         },
@@ -422,7 +419,7 @@ def main():
                 webhook_url = cfg.get("slack_webhook_url")
                 if not webhook_url:
                     raise RuntimeError("slack_webhook_url is not configured")
-                post_webhook_summary(webhook_url, envelope)
+                post_webhook_summary(webhook_url, envelope, row)
             else:
                 channel = cfg.get("slack_channel")
                 if not token or not channel:
