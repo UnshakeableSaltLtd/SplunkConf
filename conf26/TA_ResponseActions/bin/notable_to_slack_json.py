@@ -8,6 +8,14 @@ Sends the triggering Notable/Finding to Slack as a *complete* JSON
 payload (all CIM/risk/notable fields), merged with any user-defined
 additional fields configured on the action.
 
+After delivery, the action also writes back to the SAME notable so
+analysts see the result alongside the rest of the event in Incident
+Review:
+  1. cim_actions.ModularAction.message() -> native "Adaptive Responses"
+     panel / "View Adaptive Response Invocations" audit trail.
+  2. /services/notable_update comment -> a permanent entry in that
+     notable's own Activity/comment timeline (the collected Slack data).
+
 Install at:
   $SPLUNK_HOME/etc/apps/TA_ResponseActions/bin/notable_to_slack_json.py
 
@@ -33,6 +41,22 @@ import urllib.request
 
 APP_NAME = "notable_to_slack_json"
 TOKEN_RE = re.compile(r"\$(result|job)\.([A-Za-z0-9_.]+)\$")
+
+# ----------------------------------------------------------------------
+# Optional: Splunk_SA_CIM's ModularAction gives us the native Incident
+# Review "Adaptive Responses" panel + "View Adaptive Response Invocations"
+# audit trail for free, via self.message(). Splunk_SA_CIM (the Common
+# Information Model Add-on) ships by default with every Splunk ES
+# install, but we degrade gracefully - Slack delivery still works even
+# if it's missing on a non-ES search head.
+# https://dev.splunk.com/enterprise/docs/devtools/enterprisesecurity/adaptiveresponseframework/
+# ----------------------------------------------------------------------
+_SPLUNK_HOME = os.environ.get("SPLUNK_HOME", "/opt/splunk")
+sys.path.append(os.path.join(_SPLUNK_HOME, "etc", "apps", "Splunk_SA_CIM", "bin"))
+try:
+    from cim_actions import ModularAction
+except ImportError:
+    ModularAction = None
 
 
 # ----------------------------------------------------------------------
@@ -147,6 +171,30 @@ def get_secret_from_vault(server_uri, session_key, realm, app):
 
 
 # ----------------------------------------------------------------------
+# Write the collected Slack data back onto the SAME notable so it shows
+# up in the analyst's queue as part of that notable's own Activity trail
+# (not just a status flag). Only comment/status/urgency/newOwner/
+# disposition are writable via this endpoint - no arbitrary new fields.
+# https://help.splunk.com/en/splunk-enterprise-security-7/api-reference/7.2/notable-event-endpoints/notable-event-api-reference
+# ----------------------------------------------------------------------
+def post_comment_to_notable(server_uri, session_key, event_id, comment):
+    if not server_uri or not session_key:
+        raise RuntimeError("server_uri/session_key unavailable; cannot call notable_update")
+    url = f"{server_uri}/services/notable_update"
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    body = urllib.parse.urlencode({"ruleUIDs": event_id, "comment": comment}).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body, method="POST", headers={"Authorization": f"Splunk {session_key}"}
+    )
+    with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    log.info("Wrote comment back to notable event_id=%s: %s", event_id, result)
+    return result
+
+
+# ----------------------------------------------------------------------
 # Slack delivery: file_upload (recommended - no size limit)
 # ----------------------------------------------------------------------
 def slack_api_post(url, token, data=None, json_body=None):
@@ -249,12 +297,28 @@ def main():
         sys.exit(1)
 
     try:
-        payload = json.loads(sys.stdin.read())
+        raw_stdin = sys.stdin.read()
+        payload = json.loads(raw_stdin)
     except Exception:
         log.exception("Failed to parse payload JSON from stdin")
         sys.exit(2)
 
+    # cim_actions.ModularAction wraps the SAME stdin payload and gives us
+    # self.message() -> Incident Review's native "Adaptive Responses" panel.
+    # It also deletes payload['result'] internally, so it must be built from
+    # the raw JSON string, not the already-parsed `payload` dict.
+    modaction = None
+    if ModularAction is not None:
+        try:
+            modaction = ModularAction(raw_stdin, log, APP_NAME)
+        except Exception:
+            log.exception(
+                "Failed to initialize cim_actions.ModularAction; continuing "
+                "without native Adaptive Response panel reporting"
+            )
+
     cfg = payload.get("configuration", {}) or {}
+    write_back_comment = (cfg.get("write_back_comment", "1")) in ("1", "true", "True")
     job = {
         "search_name": payload.get("search_name"),
         "sid": payload.get("sid"),
@@ -293,6 +357,20 @@ def main():
         envelope = build_payload(row, job, cfg)
         json_bytes = json.dumps(envelope, indent=2 if pretty else None, default=str).encode("utf-8")
 
+        # update() sets rid/orig_sid/orig_rid so message() correlates the
+        # status back to THIS specific notable row in the AR audit trail.
+        if modaction is not None:
+            try:
+                modaction.update(
+                    {
+                        "rid": row.get("rid", str(i)),
+                        "orig_sid": row.get("orig_sid", ""),
+                        "orig_rid": row.get("orig_rid", ""),
+                    }
+                )
+            except Exception:
+                log.exception("modaction.update() failed for row=%d", i)
+
         try:
             if delivery == "webhook":
                 webhook_url = cfg.get("slack_webhook_url")
@@ -313,9 +391,55 @@ def main():
                 )
                 upload_json_to_slack(token, channel, filename, json_bytes, comment)
             log.info("Delivered notable sid=%s row=%d to Slack via %s", job.get("sid"), i, delivery)
+
+            # 1) Native Adaptive Response panel status for this notable.
+            if modaction is not None:
+                try:
+                    modaction.message(
+                        f"Sent notable to Slack via {delivery}",
+                        status="success",
+                        channel=cfg.get("slack_channel") or "",
+                    )
+                except Exception:
+                    log.exception("modaction.message() (success) failed for row=%d", i)
+
+            # 2) Persisted comment on the SAME notable's own Activity trail,
+            #    so the collected/sent data is visible with the rest of the
+            #    notable in the analyst's Incident Review queue.
+            if write_back_comment:
+                event_id = row.get("event_id")
+                if event_id:
+                    try:
+                        post_comment_to_notable(
+                            payload.get("server_uri"),
+                            payload.get("session_key"),
+                            event_id,
+                            f"Sent to Slack via {delivery} at {envelope['sent_at']}.\n"
+                            f"Additional fields: "
+                            f"{json.dumps(envelope.get('additional_fields'), default=str)}",
+                        )
+                    except Exception:
+                        log.exception(
+                            "Failed to write comment back to notable event_id=%s", event_id
+                        )
+                else:
+                    log.debug(
+                        "No event_id on row=%d (not a notable-context invocation); "
+                        "skipping notable comment write-back",
+                        i,
+                    )
         except Exception:
             log.exception("Failed to deliver notable sid=%s row=%d to Slack", job.get("sid"), i)
             failures += 1
+            if modaction is not None:
+                try:
+                    modaction.message(
+                        f"Failed to deliver notable to Slack via {delivery}",
+                        status="failure",
+                        level=logging.ERROR,
+                    )
+                except Exception:
+                    log.exception("modaction.message() (failure) failed for row=%d", i)
 
     sys.exit(0 if failures == 0 else 3)
 
