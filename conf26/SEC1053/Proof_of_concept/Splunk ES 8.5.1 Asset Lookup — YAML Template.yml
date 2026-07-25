@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://REPLACE-WITH-YOUR-SCHEMA-HOST/schemas/asset_lookup_schema.json
+# ---------------------------------------------------------------------------
+# Splunk Enterprise Security 8.5.1 - Asset lookup template
+# Validate against: asset_lookup_schema.json (JSON Schema draft-06)
+# Reference: https://help.splunk.com/en/splunk-enterprise-security-8/administer/8.5/asset-and-identity-management/extract-asset-and-identity-data-in-splunk-enterprise-security#df4f23de_e8cc_4d8b_a6b6_7bba8655e0da--en__Asset_and_identity_lookup_configurations
+#
+# Rules:
+#   - Every record needs a value in at least ONE of: ip, mac, nt_host, dns
+#     (these four are always treated as multivalue key fields).
+#   - Fields marked "multivalue" accept either a YAML list or a single
+#     pipe-delimited string, e.g. category: "server|web_farm"
+#   - Fields marked "Recommended" are not strictly required by Splunk but
+#     should be populated for accurate Urgency scoring and dashboard filtering.
+#   - This file is filled with sample values so it validates cleanly against
+#     asset_lookup_schema.json out of the box. Replace the sample values with
+#     your own data, or delete fields you don't want to populate.
+# ---------------------------------------------------------------------------
+
+- ip: "10.0.0.5"          # multivalue, string | array. Key field (one of ip/mac/nt_host/dns required). e.g. "10.0.0.5" or "10.0.0.0/24"
+  mac: "00:25:bc:42:f4:60" # multivalue, string | array. Key field (one of ip/mac/nt_host/dns required).
+  nt_host: "CORP-HOST1"    # multivalue, string | array. Key field (one of ip/mac/nt_host/dns required).
+  dns: "host1.corp.local"  # multivalue, string | array. Key field (one of ip/mac/nt_host/dns required).
+  owner: "david.pollard@corp.local"  # single-value, string. Not Recommended.
+  priority: "high"         # single-value, string. Recommended. One of: unknown | low | medium | high | critical
+  lat: "53.611000"         # single-value, string|number (decimal degrees). Not Recommended.
+  long: "-2.156000"        # single-value, string|number (decimal degrees). Not Recommended.
+  city: "Rochdale"         # single-value, string. Not Recommended.
+  country: "GB"            # single-value, string. Not Recommended.
+  bunit: "Infrastructure"  # single-value, string. Recommended.
+  category:                # multivalue, string | array. Recommended.
+    - "server"
+    - "linux"
+  pci_domain: "untrust"    # multivalue, string | array. Not Recommended (defaults to "untrust" if blank). One of: cardholder | trust | dmz | untrust | wireless
+  is_expected: true        # single-value, boolean. Not Recommended.
+  should_timesync: true    # single-value, boolean. Not Recommended.
+  should_update: true      # single-value, boolean. Not Recommended.
+  requires_av: false       # single-value, boolean. Not Recommended.
+  cim_entity_zone: "my_zone" # single-value, string. Required only if entity zones are turned on.

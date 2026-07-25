@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://REPLACE-WITH-YOUR-SCHEMA-HOST/schemas/identity_lookup_schema.json
+# ---------------------------------------------------------------------------
+# Splunk Enterprise Security 8.5.1 - Identity lookup template
+# Validate against: identity_lookup_schema.json (JSON Schema draft-06)
+# Reference: https://help.splunk.com/en/splunk-enterprise-security-8/administer/8.5/asset-and-identity-management/extract-asset-and-identity-data-in-splunk-enterprise-security#df4f23de_e8cc_4d8b_a6b6_7bba8655e0da--en__Asset_and_identity_lookup_configurations
+#
+# Rules:
+#   - "identity" is the only field Splunk marks as strictly Required.
+#   - Fields marked "multivalue" accept either a YAML list or a single
+#     pipe-delimited string, e.g. category: "Privileged|Officer"
+#   - Fields marked "Recommended" are not strictly required by Splunk but
+#     should be populated for accurate Urgency scoring and dashboard filtering.
+#   - This file is filled with sample values so it validates cleanly against
+#     identity_lookup_schema.json out of the box. Replace the sample values
+#     with your own data, or delete fields you don't want to populate.
+# ---------------------------------------------------------------------------
+
+- identity: "d.pollard|david.pollard@corp.local"  # multivalue, string | array. REQUIRED key field.
+  prefix: "Mr."             # single-value, string. Not Recommended.
+  nick: "Dave"              # single-value, string. Not Recommended.
+  first: "David"            # single-value, string. Not Recommended.
+  last: "Pollard"           # single-value, string. Not Recommended.
+  suffix: ""                # single-value, string. Not Recommended. e.g. "Ph.D"
+  email: "david.pollard@corp.local"  # single-value, string (email format). Not Recommended (used as default merge convention).
+  phone: "+44 1706 555000"  # multivalue, string | array. Not Recommended.
+  managedBy: "j.smith@corp.local"  # single-value, string. Not Recommended.
+  priority: "medium"        # single-value, string. Recommended. One of: unknown | low | medium | high | critical
+  bunit: "Infrastructure"   # single-value, string. Recommended.
+  category:                 # multivalue, string | array. Recommended.
+    - "Privileged"
+  watchlist: false          # single-value, boolean. Not Recommended.
+  startDate: "01/15/2020 09:00"  # single-value, string. Not Recommended. Formats: %m/%d/%Y %H:%M, %m/%d/%y %H:%M, or epoch seconds
+  endDate: ""                # single-value, string. Not Recommended. Same formats as startDate, or blank
+  work_city: "Rochdale"      # single-value, string. Not Recommended.
+  work_country: "GB"         # single-value, string. Not Recommended.
+  work_lat: "53.611000"      # single-value, string|number (decimal degrees). Not Recommended.
+  work_long: "-2.156000"     # single-value, string|number (decimal degrees). Not Recommended.
+  cim_entity_zone: "my_zone" # single-value, string. Required only if entity zones are turned on.

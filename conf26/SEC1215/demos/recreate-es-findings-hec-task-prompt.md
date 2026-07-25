@@ -54,7 +54,7 @@ Copy everything in the fenced block below and give it to the agent, alongside in
 it to schedule this as a recurring hourly background task (`cron="0 * * * *"`,
 `background=true`, `exact=false` if using Perplexity Computer's `schedule_cron` tool).
 
-```
+``` MCP
 You are the recurring hourly bridge between the Slack channel #es-findings (channel_id C0BKA6D4AFL) and a Splunk HTTP Event Collector, with Slack reaction status indicators.
 
 1. Maintain a tracking file at /home/user/workspace/cron_tracking/es_findings_hec/last_ts.txt containing the Slack message timestamp (ts) of the last message you fully processed. If the file doesn't exist yet, create the directory, read the current latest message ts in the channel, save it to the file, and skip processing on this very first run (nothing to backfill) -- just initialize and end.
@@ -99,7 +99,7 @@ The task text above uses Perplexity Computer–specific mechanics (`call_externa
 port this to another agent framework, replace each with its equivalent:
 
 | Perplexity Computer mechanism | Generic equivalent needed |
-|---|---|
+| --- | --- |
 | `call_external_tool(source_id='slack_direct', tool_name='slack_read_channel')` | Any Slack Web API client with `conversations.history` + channel-history OAuth scopes |
 | `api_credentials=['custom-cred:slack.com']` (shell curl) | A stored Slack bot token, injected into requests to `reactions.add`/`reactions.remove`/`files.info` |
 | `api_credentials=['custom-cred:splunk.unshakeablesalt.net']` | A stored Splunk HEC token, injected into the `Authorization: Splunk <token>` header for the POST in step 8 |
