@@ -12,9 +12,9 @@
 **Other Product or Service:** Splunk Enterprise Security Premier, AI Assistant in Security
 **Industries:** Not industry specific
 **Role:** Detection Engineer, Splunk Administrator, Security Analyst/Manager
-**Takeaway 1:** Choose the right LLM for SecOps — balancing cost, latency, privacy, and capability without defaulting to the biggest name.
-**Takeaway 2:** A repeatable pattern to integrate agentic workflows into Splunk ES — what to build yourself vs. what Splunk gives you for free.
-**Takeaway 3:** Avoid the top pitfalls — a prioritised starting framework for teams with limited time and budget to reach value fast.
+**Takeaway 1:** Learn how to use Splunk for continuous asset discovery and risk tracking across secure infrastructures.
+**Takeaway 2:** How Splunk's automated governance workflows simplify meeting regulatory mandates such as the Cyber Assessment Framework / NIST Cyber Security Framework.
+**Takeaway 3:** Understand how to turn compliance reports into proactive, automated security actions inside Splunk.
 
 ## Abstract
 
