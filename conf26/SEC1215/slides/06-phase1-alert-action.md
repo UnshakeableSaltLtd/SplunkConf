@@ -1,6 +1,6 @@
 # Phase 1: ES Alert Action Feeds the Agentic AI
 
-`TA_ResponseActions` — a custom Adaptive Response Action, `notable_to_slack_json`:
+`TA_ResponseActions` — a custom Adaptive Response Action, `notable_to_perplexity_json`:
 
 - Takes the triggering notable/finding and delivers it to Slack as a **complete JSON
   payload** — every CIM/risk/notable field, noise fields stripped, no size-limited summary.

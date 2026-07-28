@@ -40,7 +40,7 @@ One process, one request/response, no polling, no second index, no bridge.
 
 **Shipped.**
 
-`TA_ResponseActions` (Adaptive Response Action `notable_to_slack_json`) takes
+`TA_ResponseActions` (Adaptive Response Action `notable_to_perplexity_json`) takes
 the triggering notable/finding, keeps every CIM/risk/notable field, strips
 noise fields, and delivers it to Slack as a complete JSON payload — no
 size-limited summary, no lossy formatting. As of v1.3.0 it also ships a
@@ -65,7 +65,7 @@ The first attempt at solving this (see "Lesson: the Slack → HEC bridge"
 below) answered it asynchronously — post to Slack, wait for a reply, poll for
 it, parse it. v1.3.3 answers it synchronously instead: right after building
 the notable's JSON payload and before anything is sent anywhere,
-`notable_to_slack_json.py` calls the
+`notable_to_perplexity_json.py` calls the
 [Perplexity Chat Completions API](https://docs.perplexity.ai/) directly,
 passing the notable's context plus the `perplexity_ask` questions, with a
 JSON Schema `response_format` built dynamically from the ask keys (plus an

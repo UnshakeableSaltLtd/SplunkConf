@@ -23,7 +23,7 @@ adaptive-response-action approach in `TA_ResponseActions` replaced it.
 registration, `bridge_inputs.conf.retired` / `bridge_inputs.conf.spec.retired`)
 was a scripted input that closed the agentic loop asynchronously:
 
-1. `notable_to_slack_json.py` posts the notable + a `perplexity_ask` block to
+1. `notable_to_perplexity_json.py` posts the notable + a `perplexity_ask` block to
    Slack and marks the KV store record `awaiting_ai_response=1`.
 2. The bridge polls that flag every 60 seconds, reads the agentic AI's reply
    back out of the Slack thread via `conversations.replies`, parses it against
@@ -56,7 +56,7 @@ operational overhead for what it delivered:
 None of that was necessary. The alert action *already has* the full notable
 context when it runs — there's no reason to round-trip it through Slack and
 poll for an answer. **v1.3.3 replaces the bridge with a synchronous Perplexity
-API call made directly inside `notable_to_slack_json.py`**: the same
+API call made directly inside `notable_to_perplexity_json.py`**: the same
 `perplexity_ask` block is answered in-line, right before delivery, and the
 result (`perplexity_response`) is merged into the same payload that goes to
 Slack (for visual audit, unchanged) and the same write-back paths (notable

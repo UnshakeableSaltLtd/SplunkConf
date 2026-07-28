@@ -25,7 +25,7 @@ it produced in the actual build. From
 JSON export rather than a squeezed summary — a smaller/cheaper model still gets the complete
 picture to reason over."
 
-Concretely, the agentic AI actor in this build is called directly: `notable_to_slack_json.py`
+Concretely, the agentic AI actor in this build is called directly: `notable_to_perplexity_json.py`
 makes a synchronous request to the Perplexity Chat Completions API, passing the JSON payload
 plus the standing `perplexity_ask` checks you'll see in Phase 1, and the model is named by a
 plain config value, `param.perplexity_model`. Emphasise this is a *contract*, not a lock-in:

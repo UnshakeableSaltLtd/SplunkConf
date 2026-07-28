@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-notable_to_slack_json.py
+notable_to_perplexity_json.py
 --------------------------------------------------------------------
 Splunk Enterprise Security custom Adaptive Response Action.
 
@@ -37,10 +37,10 @@ Review:
      (same additional_fields JSON) surfaced via a custom drilldown.
 
 Install at:
-  $SPLUNK_HOME/etc/apps/TA_ResponseActions/bin/notable_to_slack_json.py
+  $SPLUNK_HOME/etc/apps/TA_ResponseActions/bin/notable_to_perplexity_json.py
 
 Contract: Splunk invokes this script as:
-  notable_to_slack_json.py --execute
+  notable_to_perplexity_json.py --execute
 and writes the alert configuration payload (JSON) to stdin.
 See: https://dev.splunk.com/enterprise/docs/devtools/customalertactions/writescriptcaa
 --------------------------------------------------------------------
@@ -59,7 +59,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-APP_NAME = "notable_to_slack_json"
+APP_NAME = "notable_to_perplexity_json"
 TOKEN_RE = re.compile(r"\$(result|job)\.([A-Za-z0-9_.]+)\$")
 THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
@@ -82,7 +82,7 @@ except ImportError:
 
 
 # ----------------------------------------------------------------------
-# Logging - writes to $SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log
+# Logging - writes to $SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log
 # ----------------------------------------------------------------------
 def setup_logging():
     log_dir = os.path.join(os.environ.get("SPLUNK_HOME", "/opt/splunk"), "var", "log", "splunk")
@@ -444,7 +444,7 @@ def post_webhook_summary(webhook_url, envelope, row, max_chars=3500):
 # ----------------------------------------------------------------------
 def main():
     if len(sys.argv) < 2 or sys.argv[1] != "--execute":
-        sys.stderr.write("FATAL usage: notable_to_slack_json.py --execute\n")
+        sys.stderr.write("FATAL usage: notable_to_perplexity_json.py --execute\n")
         sys.exit(1)
 
     try:

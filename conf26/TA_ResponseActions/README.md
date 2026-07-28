@@ -1,6 +1,6 @@
 # TA_ResponseActions
 
-**App Name:** Notable to Slack (Full JSON)
+**App Name:** Notable to Perplexity
 **Version:** 1.3.3
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
@@ -8,7 +8,7 @@
 ## Overview
 
 Custom Splunk Enterprise Security **Adaptive Response Action** that sends the triggering
-Notable/Finding to Slack as a complete JSON payload — every CIM/risk/notable field, plus
+Notable/Finding to Perplexity and Slack as a complete JSON payload — every CIM/risk/notable field, plus
 any user-defined additional fields merged in at send time.
 
 Two delivery modes:
@@ -36,7 +36,7 @@ Two delivery modes:
 every notable: is `$result.repo$` a repo commonly seen for this kind of finding, is
 `$result.user$` an expected/authorized user, and is `$result.src$` a low-threat source IP.
 
-When `param.perplexity_enabled` is on (default), `bin/notable_to_slack_json.py` answers that
+When `param.perplexity_enabled` is on (default), `bin/notable_to_perplexity_json.py` answers that
 block **in-line, synchronously, before delivery** — a single call to the
 [Perplexity Chat Completions API](https://docs.perplexity.ai/) with a JSON schema
 `response_format` built from the ask keys plus an `overall` risk read-out. The result is merged
@@ -135,7 +135,7 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 |---|---|
 | `default/alert_actions.conf` | Registers the action, delivery/payload parameters, `param._cam` (adhoc + drilldown) |
 | `README/alert_actions.conf.spec` | Splunk config spec — drives the auto-generated config UI |
-| `bin/notable_to_slack_json.py` | Action logic — build payload, vault lookup, Slack delivery, Adaptive Response panel status, notable comment write-back, KV store enrichment write |
+| `bin/notable_to_perplexity_json.py` | Action logic — build payload, vault lookup, Slack delivery, Adaptive Response panel status, notable comment write-back, KV store enrichment write |
 | `default/collections.conf` | `notable_slack_enrichment` KV store collection schema |
 | `default/transforms.conf` | `notable_slack_enrichment_lookup` — lookup wrapper for reading the collection via SPL |
 | `default/data/ui/views/notable_slack_enrichment_drilldown.xml` | Dashboard rendering the enrichment record (including `perplexity_response`) for a given `sid`/`rid` |
@@ -143,14 +143,14 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 | `static/appIcon.png`, `appIconAlt.png`, `appIcon_2x.png`, `appIconAlt_2x.png`, `appLogo.png`, `appLogo_2x.png` | App-level icon/logo set (App Manager convention), copied from [`splunk_build`'s `org_template`](https://github.com/UnshakeableSaltLtd/splunk_build/tree/main/library/unshakeablesalt/org_template/static) |
 | `appserver/static/appIcon.png` | Icon referenced by `alert_actions.conf`'s `icon_path = appIcon.png` for the action's UI icon in Incident Review |
 
-Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
+Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log`
 
 ## Release Notes
 
 ### 1.3.3
 
 - **Replaced the Slack → HEC bridge (`bin/slack_hec_bridge.py`, 1.3.1–1.3.2) with a synchronous
-  Perplexity API call made in-line inside `bin/notable_to_slack_json.py`.** The bridge script,
+  Perplexity API call made in-line inside `bin/notable_to_perplexity_json.py`.** The bridge script,
   its `inputs.conf`/`inputs.conf.spec` registration, and the KV store/collections/transforms/
   drilldown fields it added (`slack_thread_ts`, `awaiting_ai_response`, `risk_object`,
   `risk_object_type`, `risk_score`, `risk_message`, `hec_sent`, `notable_enriched_at`) have all
@@ -158,7 +158,7 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
   [`../SEC1215/lessons/`](../SEC1215/lessons/README.md).
 - Added `param.perplexity_enabled`, `param.perplexity_api_key_realm`, `param.perplexity_api_key`,
   and `param.perplexity_model` to `alert_actions.conf`. When enabled,
-  `bin/notable_to_slack_json.py` answers the standing `perplexity_ask` block via the Perplexity
+  `bin/notable_to_perplexity_json.py` answers the standing `perplexity_ask` block via the Perplexity
   API before delivery and merges the result into `additional_fields.perplexity_response` — see
   "Perplexity API: synchronous ask/response" above.
 - Removed the `reply_format` key from the default `perplexity_ask` block in
@@ -169,7 +169,7 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
 
 ### 1.3.2
 
-- Fixed `README/alert_actions.conf.spec` for `[notable_to_slack_json]`: added the missing
+- Fixed `README/alert_actions.conf.spec` for `[notable_to_perplexity_json]`: added the missing
   `param._cam` documentation line. Splunk's own dev docs say `param._cam` is inherited from
   `Splunk_SA_CIM`'s spec and doesn't need redeclaring, but any tooling that only resolves specs
   on a per-app basis (rather than merging in other installed apps' specs) will otherwise flag it.
@@ -204,7 +204,7 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
   `reply_format` key that pins the AI to a fixed JSON reply shape
   (`risk_score`/`risk_object`/`risk_object_type`/`risk_message`), so `slack_hec_bridge.py` can
   parse it deterministically instead of scraping free-text prose.
-- `bin/notable_to_slack_json.py` now resolves the Slack channel + message `ts` of the uploaded
+- `bin/notable_to_perplexity_json.py` now resolves the Slack channel + message `ts` of the uploaded
   file via `files.info` (file_upload delivery only) and stores it as `slack_thread_ts` on the
   KV store record, with `awaiting_ai_response=1`, so the bridge knows which thread to poll.
 - `default/collections.conf`/`transforms.conf` extended with `slack_thread_ts`,

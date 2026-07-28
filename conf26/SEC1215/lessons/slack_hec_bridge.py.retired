@@ -5,7 +5,7 @@ slack_hec_bridge.py
 Phase 2/3 of the three-phase agentic loop described in
 ../SEC1215/ARCHITECTURE.md:
 
-  Phase 1 (v1.2.0/v1.3.0, bin/notable_to_slack_json.py):
+  Phase 1 (v1.2.0/v1.3.0, bin/notable_to_perplexity_json.py):
       ES correlation search -> Adaptive Response -> Slack (file_upload),
       with the agentic AI (@perplexity_ask) asked a structured question
       in-thread, and a KV-store enrichment record left behind carrying
@@ -148,7 +148,7 @@ def _unverified_ssl_context():
 
 
 # ----------------------------------------------------------------------
-# Vault lookup - same pattern as notable_to_slack_json.get_secret_from_vault,
+# Vault lookup - same pattern as notable_to_perplexity_json.get_secret_from_vault,
 # duplicated here so this script has no import-time dependency on the
 # adaptive response action module (they are invoked by two very different
 # Splunk subsystems - alert action vs. scripted input - and are versioned
@@ -202,7 +202,7 @@ def update_kvstore_record(server_uri, session_key, key, fields, app=KVSTORE_APP)
 # ----------------------------------------------------------------------
 # Notable write-back (Phase 3) - duplicated small helper, same rationale
 # as get_secret_from_vault above and same API-shape constraint documented
-# in notable_to_slack_json.post_comment_to_notable: only comment/status/
+# in notable_to_perplexity_json.post_comment_to_notable: only comment/status/
 # urgency/newOwner/disposition are writable, no new fields.
 # ----------------------------------------------------------------------
 def post_comment_to_notable(server_uri, session_key, event_id, comment):

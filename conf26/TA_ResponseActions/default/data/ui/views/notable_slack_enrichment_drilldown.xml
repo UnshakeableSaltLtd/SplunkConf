@@ -1,6 +1,6 @@
 <form version="1.1">
   <label>Notable Slack Enrichment</label>
-  <description>Structured data collected by notable_to_slack_json.py for a specific Adaptive Response invocation. Reached via the custom drilldown_uri on that action's entry in a notable's Adaptive Responses panel (form.sid / form.rid are passed automatically).</description>
+  <description>Structured data collected by notable_to_perplexity_json.py for a specific Adaptive Response invocation. Reached via the custom drilldown_uri on that action's entry in a notable's Adaptive Responses panel (form.sid / form.rid are passed automatically).</description>
   <fieldset autoRun="true" submitButton="false">
     <input type="text" token="sid">
       <label>SID</label>

@@ -1,4 +1,4 @@
-[notable_to_slack_json]
+[notable_to_perplexity_json]
 param._cam = <string> JSON object describing this action's Common Action Model (CAM) classification -
   category, task, subject, technology, supports_adhoc, and drilldown_uri. drilldown_uri points the
   action's row in the notable's Adaptive Responses panel at our custom KV-store-backed dashboard
