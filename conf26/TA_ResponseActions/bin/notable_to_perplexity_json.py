@@ -32,7 +32,7 @@ Review:
   2. /services/notable_update comment -> a permanent entry in that
      notable's own Activity/comment timeline (the perplexity_ask/
      perplexity_response pair).
-  3. notable_slack_enrichment KV store record -> structured fields
+  3. notable_agentic_enrichment KV store record -> structured fields
      surfaced via the SAME custom drilldown notable_to_slack_json.py
      also writes to (delivery_method is set to "perplexity_api" and
      the Slack-specific fields are left blank on this action's records).

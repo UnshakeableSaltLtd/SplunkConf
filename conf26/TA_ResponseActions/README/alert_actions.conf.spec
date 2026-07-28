@@ -3,7 +3,7 @@ param._cam = <string> JSON object describing this action's Common Action Model (
   category, task, subject, technology, supports_adhoc, and drilldown_uri. drilldown_uri points the
   action's row in the notable's Adaptive Responses panel at the SAME custom KV-store-backed
   dashboard [notable_to_slack_json] also drills into
-  (default/data/ui/views/notable_slack_enrichment_drilldown.xml) instead of the default "search for
+  (default/data/ui/views/notable_agentic_enrichment_drilldown.xml) instead of the default "search for
   result events" link. Splunk_SA_CIM's own README/alert_actions.conf.spec documents param._cam as a
   standard adaptive-response key, so Splunk Enterprise itself does not require it to be redeclared
   here - it is included for local documentation completeness and for tooling (e.g. some conf linters)
@@ -32,7 +32,7 @@ param.write_back_comment = <bool> Whether to POST a comment back to the triggeri
 
 param.write_back_kvstore = <bool> Whether to persist a structured record (event_id,
   delivery_method="perplexity_api", additional_fields JSON, status/error) to the
-  notable_slack_enrichment KV store collection - the SAME collection [notable_to_slack_json]
+  notable_agentic_enrichment KV store collection - the SAME collection [notable_to_slack_json]
   writes to - keyed by this invocation's sid/rid. Surfaced to analysts via the drilldown_uri
   configured in param._cam - use this when you need real structured fields next to the notable,
   not just comment text. Default: 1
@@ -101,7 +101,7 @@ param.write_back_comment = <bool> Whether to POST a comment back to the triggeri
   the action to be invoked in a notable context (event_id present in the result row). Default: 1
 
 param.write_back_kvstore = <bool> Whether to persist a structured record (event_id, delivery
-  details, additional_fields JSON, status/error) to the notable_slack_enrichment KV store
+  details, additional_fields JSON, status/error) to the notable_agentic_enrichment KV store
   collection - the SAME collection [notable_to_perplexity_json] writes to - keyed by this
   invocation's sid/rid. Surfaced to analysts via the drilldown_uri configured in param._cam - use
   this when you need real structured fields next to the notable, not just comment text. Default: 1

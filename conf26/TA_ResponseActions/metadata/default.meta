@@ -10,11 +10,11 @@ export = system
 # owner, or the analyst running it ad hoc from Incident Review) needs WRITE
 # on this collection to persist enrichment records. Add your ES
 # analyst/admin roles here if they differ from "admin".
-[collections/notable_slack_enrichment]
+[collections/notable_agentic_enrichment]
 access = read : [ * ], write : [ admin ]
 export = system
 
-[views/notable_slack_enrichment_drilldown]
+[views/notable_agentic_enrichment_drilldown]
 access = read : [ * ], write : [ admin ]
 export = system
 

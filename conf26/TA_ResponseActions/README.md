@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.0
+**Version:** 1.4.1
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -104,7 +104,7 @@ no arbitrary new fields. To surface real structured data (delivery status, Slack
 `perplexity_api`, the exact `additional_fields` sent, error detail on failure) next to the
 notable, each action also:
 
-1. Writes a record to the **`notable_slack_enrichment`** KV store collection
+1. Writes a record to the **`notable_agentic_enrichment`** KV store collection
    (`default/collections.conf`) via `POST /servicesNS/nobody/<app>/storage/collections/data/...`,
    keyed by **this invocation's `sid`/`rid`** — not `event_id`. That's because Incident Review's
    custom `drilldown_uri` (in `param._cam`) only supports the tokens `$sid$`, `$rid$`, `$time$`,
@@ -114,20 +114,20 @@ notable, each action also:
    `notable_to_perplexity_json`'s records set `delivery_method="perplexity_api"` and leave
    `slack_channel`/`slack_permalink` blank; `notable_to_slack_json`'s records set
    `delivery_method` to `file_upload`/`webhook` and populate those fields.
-2. Declares `param._cam = {"supports_adhoc": true, "drilldown_uri": "notable_slack_enrichment_drilldown?form.sid=$sid$&form.rid=$rid$", ...}`
+2. Declares `param._cam = {"supports_adhoc": true, "drilldown_uri": "notable_agentic_enrichment_drilldown?form.sid=$sid$&form.rid=$rid$", ...}`
    in `alert_actions.conf`. `supports_adhoc` is also what makes each action appear under
    Incident Review's **Run Adaptive Response Actions** ad hoc menu at all
    ([reference](https://community.splunk.com/t5/Splunk-Enterprise-Security/The-quot-Run-Adaptive-Response-Actions-quot-is-not-listing-all/m-p/472638)).
-3. Both share a Simple XML view, `default/data/ui/views/notable_slack_enrichment_drilldown.xml`,
+3. Both share a Simple XML view, `default/data/ui/views/notable_agentic_enrichment_drilldown.xml`,
    that takes `sid`/`rid` from the drilldown URL and runs
-   `| inputlookup notable_slack_enrichment_lookup where sid="$sid$" AND rid="$rid$"` (lookup
+   `| inputlookup notable_agentic_enrichment_lookup where sid="$sid$" AND rid="$rid$"` (lookup
    defined in `default/transforms.conf`) to render the record(s) as a table — so if both actions
    fired for the same notable, both rows show up together.
 
 From a notable's Adaptive Responses panel, click through either action's entry and you land on
 that dashboard with the structured record already loaded — no re-typing tokens.
 
-Adjust `metadata/default.meta`'s `[collections/notable_slack_enrichment]` write ACL if the role
+Adjust `metadata/default.meta`'s `[collections/notable_agentic_enrichment]` write ACL if the role
 that invokes either action (correlation search owner, or an analyst running it ad hoc) isn't
 `admin`.
 
@@ -201,6 +201,14 @@ Since 1.4.0 the app is visible in Splunk Web's app nav (`is_visible = 1`) with t
 
 ## Installation
 
+> **Upgrading from 1.4.0 or earlier?** The KV store collection was renamed from
+> `notable_slack_enrichment` to `notable_agentic_enrichment` in 1.4.1 (see Release Notes). Splunk
+> does not rename existing KV store collections on upgrade — any enrichment records already
+> written under the old name stay in `notable_slack_enrichment` and won't show up in the renamed
+> drilldown dashboard. If you need that history, export it first (`| inputlookup
+> notable_slack_enrichment_lookup`) and re-import into the new collection, or simply let old
+> records age out and let new invocations populate `notable_agentic_enrichment` going forward.
+
 1. Copy this folder to `$SPLUNK_HOME/etc/apps/TA_ResponseActions/`, restart Splunk.
 2. Open the app in Splunk Web — the **Setup** page appears automatically (or via **Manage Apps >
    TA_ResponseActions > Set up**) — and submit the Slack bot token and Perplexity API key there.
@@ -237,9 +245,9 @@ Since 1.4.0 the app is visible in Splunk Web's app nav (`is_visible = 1`) with t
 | `bin/ta_common.py` | Shared code used by both actions — payload building, credential vault lookups (Slack + Perplexity), the Perplexity API call, Slack delivery helpers, notable comment write-back, KV store write, and both `check_slack_connectivity()`/`check_perplexity_connectivity()` probes. Each caller passes in its own `log`/`app_name` so log lines land in that script's own log file. |
 | `bin/notable_to_perplexity_json.py` | Agentic response action — answers `perplexity_ask` synchronously via Perplexity, Adaptive Response panel status, notable comment write-back, KV store enrichment write. No Slack objects. |
 | `bin/notable_to_slack_json.py` | Slack notification action — builds the same JSON envelope (unanswered) and delivers to Slack, Adaptive Response panel status, notable comment write-back, KV store enrichment write. No Perplexity objects. |
-| `default/collections.conf` | `notable_slack_enrichment` KV store collection schema (shared by both actions) |
-| `default/transforms.conf` | `notable_slack_enrichment_lookup` — lookup wrapper for reading the collection via SPL |
-| `default/data/ui/views/notable_slack_enrichment_drilldown.xml` | Dashboard rendering the enrichment record(s) (from either/both actions) for a given `sid`/`rid` |
+| `default/collections.conf` | `notable_agentic_enrichment` KV store collection schema (shared by both actions) |
+| `default/transforms.conf` | `notable_agentic_enrichment_lookup` — lookup wrapper for reading the collection via SPL |
+| `default/data/ui/views/notable_agentic_enrichment_drilldown.xml` | Dashboard rendering the enrichment record(s) (from either/both actions) for a given `sid`/`rid` |
 | `default/data/ui/nav/default.xml` | App nav — README page as the default landing view, plus the drilldown dashboard and stock Search |
 | `default/data/ui/views/readme.xml` | Simple XML view embedding `appserver/static/readme.html` |
 | `appserver/static/readme.html` | Static in-app rendering of this README |
@@ -252,6 +260,29 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.1
+
+- **Renamed the shared KV store collection, lookup, and drilldown dashboard away from their
+  Slack-specific names**, since 1.4.0 made it a genuinely shared object written by both actions —
+  including `notable_to_perplexity_json` records that never touch Slack at all:
+  - Collection: `notable_slack_enrichment` → **`notable_agentic_enrichment`**
+    (`default/collections.conf`).
+  - Lookup: `notable_slack_enrichment_lookup` → **`notable_agentic_enrichment_lookup`**
+    (`default/transforms.conf`).
+  - Dashboard: `default/data/ui/views/notable_slack_enrichment_drilldown.xml` →
+    **`default/data/ui/views/notable_agentic_enrichment_drilldown.xml`**, relabeled "Notable
+    Agentic Enrichment" with an updated description noting both actions write to it.
+  - Updated every reference: both `param._cam.drilldown_uri` values in `alert_actions.conf`, the
+    `[collections/...]`/`[views/...]` ACL stanzas in `metadata/default.meta`, the nav entry in
+    `default/data/ui/nav/default.xml`, and all mentions in `bin/ta_common.py`,
+    `README/alert_actions.conf.spec`, and this README.
+  - No field-level renames — `field.slack_channel`/`field.slack_permalink` stay as-is (still
+    accurate for `notable_to_slack_json` records; simply blank for `notable_to_perplexity_json`
+    records) and no data migration is needed for existing KV store rows under the old collection
+    name, though they won't be visible under the new name — see the note in "Installation" below.
+- Version bumped **1.4.0 → 1.4.1** (patch bump — naming/documentation fix only, no behavioral
+  change to either action's logic).
 
 ### 1.4.0
 
@@ -393,13 +424,13 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 ### 1.2.0
 
 - Added `param.write_back_kvstore` — persists a structured enrichment record (event_id, delivery
-  method, Slack channel, `additional_fields` JSON, status/error) to a new `notable_slack_enrichment`
+  method, Slack channel, `additional_fields` JSON, status/error) to a new `notable_agentic_enrichment`
   KV store collection, keyed by the AR invocation's `sid`/`rid`.
 - Added `param._cam` to `alert_actions.conf`: `supports_adhoc: true` (makes the action available
   under Incident Review's "Run Adaptive Response Actions" ad hoc menu) and a `drilldown_uri`
   pointing at a new custom dashboard.
 - Added `default/collections.conf`, `default/transforms.conf`, and
-  `default/data/ui/views/notable_slack_enrichment_drilldown.xml` for the KV store lookup + view.
+  `default/data/ui/views/notable_agentic_enrichment_drilldown.xml` for the KV store lookup + view.
 - Fixed a repo-level `.gitignore` bug (a leftover PyInstaller `*.spec` rule) that was silently
   excluding Splunk's `.conf.spec` convention files from commits.
 

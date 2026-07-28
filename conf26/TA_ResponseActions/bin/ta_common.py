@@ -428,12 +428,12 @@ def post_comment_to_notable(server_uri, session_key, event_id, comment, log):
 
 
 # ----------------------------------------------------------------------
-# Write a STRUCTURED enrichment record to the shared notable_slack_enrichment
+# Write a STRUCTURED enrichment record to the shared notable_agentic_enrichment
 # KV store collection, keyed by this AR invocation's sid/rid (the only tokens
 # Incident Review's custom drilldown_uri supports - event_id is NOT one of
 # them). Both actions write to this SAME collection (see default/collections.conf)
 # so both surface through the same drilldown dashboard
-# (default/data/ui/views/notable_slack_enrichment_drilldown.xml); the
+# (default/data/ui/views/notable_agentic_enrichment_drilldown.xml); the
 # perplexity action simply leaves delivery_method/slack_channel/slack_permalink
 # blank or set to "perplexity_api" since it never talks to Slack.
 # https://dev.splunk.com/view/SP-CAAAEZG (KV store REST write)
@@ -441,7 +441,7 @@ def post_comment_to_notable(server_uri, session_key, event_id, comment, log):
 def write_kvstore_record(server_uri, session_key, app, record, log):
     if not server_uri or not session_key:
         raise RuntimeError("server_uri/session_key unavailable; cannot write to KV store")
-    url = f"{server_uri}/servicesNS/nobody/{app}/storage/collections/data/notable_slack_enrichment"
+    url = f"{server_uri}/servicesNS/nobody/{app}/storage/collections/data/notable_agentic_enrichment"
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE

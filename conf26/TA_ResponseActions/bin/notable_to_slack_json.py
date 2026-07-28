@@ -27,7 +27,7 @@ Review:
      panel / "View Adaptive Response Invocations" audit trail.
   2. /services/notable_update comment -> a permanent entry in that
      notable's own Activity/comment timeline.
-  3. notable_slack_enrichment KV store record -> structured fields
+  3. notable_agentic_enrichment KV store record -> structured fields
      (same additional_fields JSON) surfaced via a custom drilldown -
      the SAME collection/drilldown notable_to_perplexity_json.py also
      writes to.

@@ -1,6 +1,6 @@
 <form version="1.1">
-  <label>Notable Slack Enrichment</label>
-  <description>Structured data collected by notable_to_perplexity_json.py for a specific Adaptive Response invocation. Reached via the custom drilldown_uri on that action's entry in a notable's Adaptive Responses panel (form.sid / form.rid are passed automatically).</description>
+  <label>Notable Agentic Enrichment</label>
+  <description>Structured data collected by either notable_to_perplexity_json.py (Perplexity agentic response, delivery_method="perplexity_api") or notable_to_slack_json.py (Slack notification, delivery_method="file_upload"/"webhook") for a specific Adaptive Response invocation - both actions share this collection. Reached via the custom drilldown_uri on either action's entry in a notable's Adaptive Responses panel (form.sid / form.rid are passed automatically).</description>
   <fieldset autoRun="true" submitButton="false">
     <input type="text" token="sid">
       <label>SID</label>
@@ -13,10 +13,10 @@
   </fieldset>
   <row>
     <panel>
-      <title>Slack delivery / enrichment record for this notable</title>
+      <title>Agentic response / delivery enrichment record(s) for this notable</title>
       <table>
         <search>
-          <query>| inputlookup notable_slack_enrichment_lookup where sid="$sid$" AND rid="$rid$"
+          <query>| inputlookup notable_agentic_enrichment_lookup where sid="$sid$" AND rid="$rid$"
 | table event_id sent_at delivery_method slack_channel slack_permalink status error additional_fields
 | sort - sent_at</query>
           <earliest>0</earliest>
@@ -32,7 +32,7 @@
       <title>Raw additional_fields JSON (most recent record)</title>
       <table>
         <search>
-          <query>| inputlookup notable_slack_enrichment_lookup where sid="$sid$" AND rid="$rid$"
+          <query>| inputlookup notable_agentic_enrichment_lookup where sid="$sid$" AND rid="$rid$"
 | sort - sent_at
 | head 1
 | table additional_fields
