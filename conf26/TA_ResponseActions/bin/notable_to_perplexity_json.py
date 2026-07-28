@@ -64,6 +64,42 @@ TOKEN_RE = re.compile(r"\$(result|job)\.([A-Za-z0-9_.]+)\$")
 THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 
+# Known Slack Web API error codes that mean "this credential is bad", as opposed to a
+# transient network problem or a channel/permission issue unrelated to the token itself.
+# https://api.slack.com/methods/auth.test
+_SLACK_AUTH_ERRORS = {
+    "invalid_auth", "not_authed", "account_inactive", "token_revoked",
+    "token_expired", "no_permission", "missing_scope", "ekm_access_denied",
+}
+
+
+class SlackApiError(RuntimeError):
+    """Raised for any Slack Web API call that returns ok=false. is_auth_error flags
+    the subset of error codes that specifically mean "this bot token is bad", so
+    callers can log an unambiguous, greppable AUTH FAILURE line instead of a generic
+    one - the whole point being that a bad credential should never look the same in
+    the log as a bad channel ID or a network blip."""
+
+    def __init__(self, method, result):
+        self.method = method
+        self.result = result
+        self.error = result.get("error", "unknown_error")
+        self.is_auth_error = self.error in _SLACK_AUTH_ERRORS
+        super().__init__(f"{method} failed: {result}")
+
+
+class PerplexityApiError(RuntimeError):
+    """Raised for any non-2xx response from api.perplexity.ai. is_auth_error flags
+    401/403 specifically (bad/expired API key) so callers can distinguish "the key is
+    wrong" from "the API had a bad day" (rate limit, 5xx, timeout, etc.) in the log."""
+
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self.body = body
+        self.is_auth_error = status_code in (401, 403)
+        super().__init__(f"HTTP {status_code}: {body}")
+
+
 # ----------------------------------------------------------------------
 # Optional: Splunk_SA_CIM's ModularAction gives us the native Incident
 # Review "Adaptive Responses" panel + "View Adaptive Response Invocations"
@@ -194,6 +230,72 @@ def get_secret_from_vault(server_uri, session_key, realm, app):
 
 
 # ----------------------------------------------------------------------
+# Credential resolution helpers - shared by the real send path AND the
+# test_connectivity check path below, so both report the SAME "where did
+# this credential come from" source string in the log (vault realm=X vs
+# plaintext vs not configured at all). This is deliberately its own
+# function rather than inlined at each call site: a vault lookup failure
+# (bad realm name, storage/passwords unreachable) is a DIFFERENT problem
+# from the credential itself being wrong, and needs to be distinguishable
+# in the log from an auth failure against Slack/Perplexity's own API.
+# ----------------------------------------------------------------------
+def resolve_slack_bot_token(cfg, server_uri, session_key, app):
+    token = (cfg.get("slack_bot_token") or "").strip()
+    if token:
+        return token, "plaintext (param.slack_bot_token)"
+    realm = (cfg.get("slack_bot_token_realm") or "").strip()
+    if not realm:
+        return "", "not configured (no slack_bot_token or slack_bot_token_realm)"
+    try:
+        token = get_secret_from_vault(server_uri, session_key, realm, app) or ""
+    except Exception:
+        log.exception(
+            "SLACK CREDENTIAL LOOKUP FAILURE: could not read realm=%s from storage/passwords "
+            "(vault unreachable, bad realm name, or insufficient permissions on the running "
+            "user context) - this is NOT the same as an invalid token, check connectivity to "
+            "server_uri first",
+            realm,
+        )
+        return "", f"vault lookup failed for realm={realm}"
+    if not token:
+        log.warning(
+            "SLACK CREDENTIAL LOOKUP FAILURE: realm=%s has no stored password (empty result, "
+            "not a lookup error) - nothing was ever saved under this realm",
+            realm,
+        )
+        return "", f"vault realm={realm} (empty)"
+    return token, f"vault realm={realm}"
+
+
+def resolve_perplexity_api_key(cfg, server_uri, session_key, app):
+    api_key = (cfg.get("perplexity_api_key") or "").strip()
+    if api_key:
+        return api_key, "plaintext (param.perplexity_api_key)"
+    realm = (cfg.get("perplexity_api_key_realm") or "").strip()
+    if not realm:
+        return "", "not configured (no perplexity_api_key or perplexity_api_key_realm)"
+    try:
+        api_key = get_secret_from_vault(server_uri, session_key, realm, app) or ""
+    except Exception:
+        log.exception(
+            "PERPLEXITY CREDENTIAL LOOKUP FAILURE: could not read realm=%s from storage/passwords "
+            "(vault unreachable, bad realm name, or insufficient permissions on the running user "
+            "context) - this is NOT the same as an invalid key, check connectivity to server_uri "
+            "first",
+            realm,
+        )
+        return "", f"vault lookup failed for realm={realm}"
+    if not api_key:
+        log.warning(
+            "PERPLEXITY CREDENTIAL LOOKUP FAILURE: realm=%s has no stored password (empty "
+            "result, not a lookup error) - nothing was ever saved under this realm",
+            realm,
+        )
+        return "", f"vault realm={realm} (empty)"
+    return api_key, f"vault realm={realm}"
+
+
+# ----------------------------------------------------------------------
 # Perplexity API: answer this notable's "perplexity_ask" questions
 # synchronously, right here in the alert action, so the answer travels
 # with the SAME Slack post (for visual audit) and the SAME write-back-
@@ -201,19 +303,43 @@ def get_secret_from_vault(server_uri, session_key, realm, app):
 # agent or HEC index required. See module docstring for background.
 # https://docs.perplexity.ai/docs/agent-api/output-control (structured outputs)
 # ----------------------------------------------------------------------
+def call_perplexity_api(api_key, model, messages, response_format=None, max_tokens=None, timeout=30):
+    """Low-level POST to /chat/completions, shared by the real ask/response path and
+    the test_connectivity check below. Raises PerplexityApiError on any non-2xx
+    response, carrying the HTTP status and raw response body so the caller can log
+    the EXACT reason (e.g. the API's own "Invalid API key provided." text on a 401)
+    instead of a bare stack trace."""
+    req_body = {"model": model, "messages": messages}
+    if response_format is not None:
+        req_body["response_format"] = response_format
+    if max_tokens is not None:
+        req_body["max_tokens"] = max_tokens
+    req = urllib.request.Request(
+        PERPLEXITY_API_URL,
+        data=json.dumps(req_body).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode("utf-8", errors="replace")
+        raise PerplexityApiError(e.code, body_text) from e
+
+
 def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, session_key, app):
     if not isinstance(perplexity_ask, dict) or not perplexity_ask:
         return None
 
-    api_key = (cfg.get("perplexity_api_key") or "").strip()
-    realm = (cfg.get("perplexity_api_key_realm") or "").strip()
-    if not api_key and realm:
-        try:
-            api_key = get_secret_from_vault(server_uri, session_key, realm, app) or ""
-        except Exception:
-            log.exception("Failed to fetch Perplexity API key from vault realm=%s", realm)
+    api_key, source = resolve_perplexity_api_key(cfg, server_uri, session_key, app)
     if not api_key:
-        log.info("No Perplexity API key configured (key or key_realm); skipping perplexity_response")
+        log.info(
+            "No Perplexity API key configured (%s); skipping perplexity_response", source
+        )
         return None
 
     model = (cfg.get("perplexity_model") or "sonar").strip()
@@ -240,44 +366,60 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
         f"Notable context (already extracted from the finding):\n{json.dumps(context_fields, default=str)}\n\n"
         f"Questions to answer:\n{json.dumps(perplexity_ask, default=str)}"
     )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {"name": "perplexity_response", "schema": schema},
+    }
 
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {"name": "perplexity_response", "schema": schema},
-            },
-        }
-    ).encode("utf-8")
-
-    req = urllib.request.Request(
-        PERPLEXITY_API_URL,
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-    )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
+        result = call_perplexity_api(api_key, model, messages, response_format=response_format)
+    except PerplexityApiError as e:
+        if e.is_auth_error:
+            log.error(
+                "PERPLEXITY AUTH FAILURE: HTTP %s from api.perplexity.ai (key source=%s, "
+                "ask_keys=%s, model=%s): %s - perplexity_response skipped, notable is still "
+                "delivered to Slack without it",
+                e.status_code, source, ask_keys, model, e.body,
+            )
+        else:
+            log.error(
+                "PERPLEXITY API FAILURE (non-auth): HTTP %s from api.perplexity.ai (key "
+                "source=%s, ask_keys=%s, model=%s): %s",
+                e.status_code, source, ask_keys, model, e.body,
+            )
+        return None
+    except Exception:
+        log.exception(
+            "PERPLEXITY API FAILURE: network/timeout error calling api.perplexity.ai (key "
+            "source=%s, ask_keys=%s, model=%s)",
+            source, ask_keys, model,
+        )
+        return None
+
+    try:
         content = result["choices"][0]["message"]["content"]
         # sonar-reasoning* models prepend a <think>...</think> block even
         # with response_format set; strip it before parsing, just in case
         # this TA is ever pointed at one of those models.
         content = THINK_TAG_RE.sub("", content).strip()
         answer = json.loads(content)
-        log.info("Got perplexity_response for keys=%s via model=%s", ask_keys, model)
-        return answer
     except Exception:
-        log.exception("Perplexity API call failed for ask_keys=%s model=%s", ask_keys, model)
+        log.exception(
+            "PERPLEXITY API FAILURE: could not parse response content (key source=%s, "
+            "ask_keys=%s, model=%s): %s",
+            source, ask_keys, model, result,
+        )
         return None
+
+    log.info(
+        "PERPLEXITY AUTH OK: got perplexity_response for keys=%s via model=%s (key source=%s)",
+        ask_keys, model, source,
+    )
+    return answer
 
 
 # ----------------------------------------------------------------------
@@ -364,6 +506,16 @@ def slack_api_post(url, token, data=None, json_body=None):
         return json.loads(resp.read().decode("utf-8"))
 
 
+def raise_for_slack_error(method, result):
+    """Slack's Web API returns HTTP 200 even for a bad/expired/revoked token - the
+    ONLY signal is result['ok'] == False plus an error code (see _SLACK_AUTH_ERRORS
+    above). Centralising the check here means every call site raises the SAME
+    SlackApiError, so a bad credential is always logged the same unambiguous way,
+    however deep in the file_upload flow it happens to fail."""
+    if not result.get("ok"):
+        raise SlackApiError(method, result)
+
+
 def upload_json_to_slack(token, channel, filename, json_bytes, comment):
     # Step 1: request an upload URL (files.upload is retired as of 2025-11-12)
     step1 = slack_api_post(
@@ -371,8 +523,7 @@ def upload_json_to_slack(token, channel, filename, json_bytes, comment):
         token,
         data={"filename": filename, "length": str(len(json_bytes))},
     )
-    if not step1.get("ok"):
-        raise RuntimeError(f"files.getUploadURLExternal failed: {step1}")
+    raise_for_slack_error("files.getUploadURLExternal", step1)
     upload_url, file_id = step1["upload_url"], step1["file_id"]
 
     # Step 2: POST the raw JSON bytes to that URL
@@ -393,9 +544,94 @@ def upload_json_to_slack(token, channel, filename, json_bytes, comment):
             "initial_comment": comment,
         },
     )
-    if not step3.get("ok"):
-        raise RuntimeError(f"files.completeUploadExternal failed: {step3}")
+    raise_for_slack_error("files.completeUploadExternal", step3)
     return step3
+
+
+# ----------------------------------------------------------------------
+# Connectivity / credential test mode (param.test_connectivity=1). Invoke
+# manually via Splunk's built-in `sendalert` search command, e.g.:
+#   | makeresults | sendalert notable_to_perplexity_json param.test_connectivity=1
+# Each check below is side-effect-free: Slack gets only an auth.test call (no
+# message posted, no file uploaded); Perplexity gets a minimal 1-token
+# completion (no perplexity_ask processing, no schema). Nothing is written back
+# to any notable, comment, or KV store record in this mode - it exists purely
+# to answer "are the credentials this action depends on actually valid right
+# now", with the answer logged unambiguously either way.
+# ----------------------------------------------------------------------
+def check_slack_connectivity(cfg, server_uri, session_key, app):
+    """Returns (ok, detail): ok is True/False/None (None = not configured)."""
+    token, source = resolve_slack_bot_token(cfg, server_uri, session_key, app)
+    if not token:
+        log.warning("SLACK AUTH SKIPPED: %s", source)
+        return None, source
+    try:
+        result = slack_api_post("https://slack.com/api/auth.test", token, data={})
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode("utf-8", errors="replace")
+        log.error(
+            "SLACK AUTH FAILURE: HTTP %s calling auth.test (token source=%s): %s",
+            e.code, source, body_text,
+        )
+        return False, f"HTTP {e.code}: {body_text}"
+    except Exception as e:
+        log.exception(
+            "SLACK AUTH FAILURE: network/timeout error calling auth.test (token source=%s)",
+            source,
+        )
+        return False, str(e)
+    if result.get("ok"):
+        log.info(
+            "SLACK AUTH OK: team=%s user=%s bot_id=%s (token source=%s)",
+            result.get("team"), result.get("user"), result.get("bot_id"), source,
+        )
+        return True, result
+    error = result.get("error", "unknown_error")
+    log.error(
+        "SLACK AUTH FAILURE: auth.test returned ok=false error=%s (token source=%s) - "
+        "this token will NOT be able to deliver notables",
+        error, source,
+    )
+    return False, error
+
+
+def check_perplexity_connectivity(cfg, server_uri, session_key, app):
+    """Returns (ok, detail): ok is True/False/None (None = not configured)."""
+    api_key, source = resolve_perplexity_api_key(cfg, server_uri, session_key, app)
+    if not api_key:
+        log.warning("PERPLEXITY AUTH SKIPPED: %s", source)
+        return None, source
+    model = (cfg.get("perplexity_model") or "sonar").strip()
+    try:
+        call_perplexity_api(
+            api_key, model,
+            [{"role": "user", "content": "Reply with exactly: OK"}],
+            max_tokens=5,
+            timeout=15,
+        )
+    except PerplexityApiError as e:
+        if e.is_auth_error:
+            log.error(
+                "PERPLEXITY AUTH FAILURE: HTTP %s from api.perplexity.ai (key source=%s, "
+                "model=%s): %s - this key will NOT be able to answer perplexity_ask checks",
+                e.status_code, source, model, e.body,
+            )
+        else:
+            log.error(
+                "PERPLEXITY API FAILURE (non-auth): HTTP %s from api.perplexity.ai (key "
+                "source=%s, model=%s): %s",
+                e.status_code, source, model, e.body,
+            )
+        return False, f"HTTP {e.status_code}: {e.body}"
+    except Exception as e:
+        log.exception(
+            "PERPLEXITY API FAILURE: network/timeout error calling api.perplexity.ai (key "
+            "source=%s, model=%s)",
+            source, model,
+        )
+        return False, str(e)
+    log.info("PERPLEXITY AUTH OK: model=%s responded to test call (key source=%s)", model, source)
+    return True, "ok"
 
 
 # ----------------------------------------------------------------------
@@ -472,7 +708,54 @@ def main():
     write_back_comment = (cfg.get("write_back_comment", "1")) in ("1", "true", "True")
     write_back_kvstore = (cfg.get("write_back_kvstore", "1")) in ("1", "true", "True")
     perplexity_enabled = (cfg.get("perplexity_enabled", "1")) in ("1", "true", "True")
+    test_connectivity = (cfg.get("test_connectivity", "0")) in ("1", "true", "True")
     kvstore_app = payload.get("app", "TA_ResponseActions") or "TA_ResponseActions"
+
+    # Unconditional heartbeat: every single invocation of this script leaves
+    # this log line no matter what happens next (bad payload, no rows, an
+    # unhandled exception, a crash) - so "did the alert action even run" is
+    # never a question that needs guessing at from an empty/missing log file.
+    log.info(
+        "Invoked: sid=%s search_name=%s test_connectivity=%s perplexity_enabled=%s "
+        "delivery_method=%s",
+        payload.get("sid"), payload.get("search_name"), test_connectivity,
+        perplexity_enabled, cfg.get("delivery_method") or "file_upload",
+    )
+
+    if test_connectivity:
+        # Side-effect-free credential check: no rows are loaded, nothing is
+        # sent to Slack, nothing is written back to any notable or KV store.
+        # Just resolve + probe each configured credential and log the result
+        # unambiguously as SLACK/PERPLEXITY AUTH OK / AUTH FAILURE / AUTH SKIPPED.
+        slack_ok, slack_detail = check_slack_connectivity(
+            cfg, payload.get("server_uri"), payload.get("session_key"), payload.get("app", "search")
+        )
+        perplexity_ok = None
+        perplexity_detail = "skipped (perplexity_enabled=0)"
+        if perplexity_enabled:
+            perplexity_ok, perplexity_detail = check_perplexity_connectivity(
+                cfg, payload.get("server_uri"), payload.get("session_key"), payload.get("app", "search")
+            )
+        else:
+            log.warning("PERPLEXITY AUTH SKIPPED: %s", perplexity_detail)
+
+        overall_ok = slack_ok is not False and perplexity_ok is not False
+        log.info(
+            "test_connectivity summary: slack_ok=%s (%s) perplexity_ok=%s (%s) -> %s",
+            slack_ok, slack_detail, perplexity_ok, perplexity_detail,
+            "PASS" if overall_ok else "FAIL",
+        )
+        if modaction is not None:
+            try:
+                modaction.message(
+                    f"test_connectivity: slack_ok={slack_ok} perplexity_ok={perplexity_ok}",
+                    status="success" if overall_ok else "failure",
+                    level=logging.INFO if overall_ok else logging.ERROR,
+                )
+            except Exception:
+                log.exception("modaction.message() failed for test_connectivity summary")
+        sys.exit(0 if overall_ok else 3)
+
     job = {
         "search_name": payload.get("search_name"),
         "sid": payload.get("sid"),
@@ -496,15 +779,12 @@ def main():
     pretty = (cfg.get("pretty_print", "1")) in ("1", "true", "True")
 
     # Resolve the Slack bot token: prefer the credential vault realm.
-    token = (cfg.get("slack_bot_token") or "").strip()
-    realm = (cfg.get("slack_bot_token_realm") or "").strip()
-    if delivery == "file_upload" and not token and realm:
-        try:
-            token = get_secret_from_vault(
-                payload.get("server_uri"), payload.get("session_key"), realm, payload.get("app", "search")
-            )
-        except Exception:
-            log.exception("Failed to fetch Slack bot token from vault realm=%s", realm)
+    token, token_source = ("", "not needed (delivery_method=webhook)")
+    if delivery != "webhook":
+        token, token_source = resolve_slack_bot_token(
+            cfg, payload.get("server_uri"), payload.get("session_key"), payload.get("app", "search")
+        )
+        log.info("Slack bot token resolved from: %s", token_source)
 
     failures = 0
     for i, row in enumerate(rows[:max_events]):
@@ -642,8 +922,16 @@ def main():
                     log.exception(
                         "Failed to write KV store enrichment record for row=%d", i
                     )
-        except Exception:
-            log.exception("Failed to deliver notable sid=%s row=%d to Slack", job.get("sid"), i)
+        except (SlackApiError, Exception) as e:
+            if isinstance(e, SlackApiError) and e.is_auth_error:
+                log.error(
+                    "SLACK AUTH FAILURE: %s failed with error=%s (token source=%s) while "
+                    "delivering notable sid=%s row=%d - credential is invalid/expired/revoked, "
+                    "not a transient error",
+                    e.method, e.error, token_source, job.get("sid"), i,
+                )
+            else:
+                log.exception("Failed to deliver notable sid=%s row=%d to Slack", job.get("sid"), i)
             failures += 1
             if modaction is not None:
                 try:

@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity
-**Version:** 1.3.3
+**Version:** 1.3.4
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -104,6 +104,52 @@ that dashboard with the structured record already loaded — no re-typing tokens
 Adjust `metadata/default.meta`'s `[collections/notable_slack_enrichment]` write ACL if the role
 that invokes the action (correlation search owner, or an analyst running it ad hoc) isn't `admin`.
 
+## Testing connectivity / credentials
+
+Both credentials this action depends on — the Slack bot token and the Perplexity API key — can
+silently go bad between deployments (rotated, revoked, expired, realm renamed) without anyone
+noticing until the next real notable fires and delivery fails. `param.test_connectivity` gives you
+a side-effect-free way to check both right now, without needing a real notable or firing any
+correlation search.
+
+When `param.test_connectivity = 1`, `bin/notable_to_perplexity_json.py` skips **all** normal
+processing — no result rows are read, nothing is posted to Slack, nothing is written back to any
+notable comment or KV store record — and instead just resolves and probes each configured
+credential:
+
+- **Slack** — calls `auth.test` (no message posted, no file uploaded). Skipped entirely if no
+  `param.slack_bot_token`/`param.slack_bot_token_realm` is configured.
+- **Perplexity** — sends a minimal 1-token completion request. Skipped if `param.perplexity_enabled`
+  is off, or if no `param.perplexity_api_key`/`param.perplexity_api_key_realm` is configured.
+
+Invoke it ad hoc via Splunk's built-in `sendalert` search command — this works from Splunk Web's
+Search app, no correlation search required:
+
+```
+| makeresults | sendalert notable_to_perplexity_json param.test_connectivity=1
+```
+
+Then check `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` (or run
+`index=_internal source=*notable_to_perplexity_json.log*` if that log is being indexed) and grep
+for one of these unambiguous outcome lines, one pair per credential:
+
+| Log line prefix | Meaning |
+|---|---|
+| `SLACK AUTH OK` / `PERPLEXITY AUTH OK` | Credential is valid and the API accepted it |
+| `SLACK AUTH FAILURE` / `PERPLEXITY AUTH FAILURE` | Credential is invalid/expired/revoked — this is NOT a transient/network error, the API explicitly rejected it (e.g. `auth.test` returned `ok=false error=invalid_auth`, or Perplexity returned HTTP 401/403) |
+| `PERPLEXITY API FAILURE (non-auth)` | Perplexity API reachable and credential fine, but the request failed for another reason (rate limit, bad model name, etc.) |
+| `SLACK AUTH SKIPPED` / `PERPLEXITY AUTH SKIPPED` | Nothing configured for that credential (or `perplexity_enabled=0`) — not a failure, just not tested |
+
+Every invocation of the script — with or without `test_connectivity` set, successful or not —
+also always logs an unconditional `Invoked: sid=... search_name=... test_connectivity=...
+perplexity_enabled=... delivery_method=...` heartbeat line first, so "did the alert action even
+run" is never a question you have to guess at from a missing log entry.
+
+The same `SLACK AUTH FAILURE` / `PERPLEXITY AUTH FAILURE` labelling is also used during **real**
+notable delivery (not just the test mode) — if a live send fails because Slack rejects the bot
+token, or because a `perplexity_ask` call gets a 401/403, the log line makes that unmistakable
+rather than burying it in a generic Python traceback.
+
 ## Installation
 
 1. Copy this folder to `$SPLUNK_HOME/etc/apps/TA_ResponseActions/`, restart Splunk.
@@ -146,6 +192,30 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log`
 
 ## Release Notes
+
+### 1.3.4
+
+- Added `param.test_connectivity` — a side-effect-free credential check mode (see "Testing
+  connectivity / credentials" above). Skips all real processing and just probes Slack
+  (`auth.test`) and Perplexity (a minimal 1-token completion), logging unambiguous
+  `SLACK/PERPLEXITY AUTH OK` / `AUTH FAILURE` / `AUTH SKIPPED` lines. Invoke via
+  `| makeresults | sendalert notable_to_perplexity_json param.test_connectivity=1`.
+- Added `SlackApiError` and `PerplexityApiError` exception classes (each with an `is_auth_error`
+  flag) so a bad/expired/revoked credential is now always distinguishable in the log from a
+  generic network/timeout/parse error, both in the new test mode and during normal delivery.
+- Added `resolve_slack_bot_token()` / `resolve_perplexity_api_key()` helpers that centralize the
+  vault-vs-plaintext credential lookup (previously duplicated inline in `main()`) and report a
+  clear "source" string (`vault realm=...` / `plaintext` / `not configured`) in every related log
+  line.
+- `get_perplexity_response()` now logs a distinct `PERPLEXITY AUTH FAILURE` line for HTTP
+  401/403 versus `PERPLEXITY API FAILURE` for other errors (rate limits, network issues, response
+  parsing failures), instead of one generic `log.exception(...)` for every case.
+- Every invocation now logs an unconditional `Invoked: sid=... search_name=...
+  test_connectivity=... perplexity_enabled=... delivery_method=...` heartbeat line immediately
+  after parsing configuration, regardless of outcome.
+- The real Slack delivery failure path now detects `SlackApiError` and logs a distinct
+  `SLACK AUTH FAILURE` line (with the failing method + Slack error code) when the token itself is
+  the problem, in addition to the existing generic failure logging for non-auth errors.
 
 ### 1.3.3
 

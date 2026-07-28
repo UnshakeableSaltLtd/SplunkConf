@@ -60,3 +60,12 @@ param.perplexity_api_key = <string> Plaintext fallback for the Perplexity API ke
 
 param.perplexity_model = <string> Perplexity chat model to use for the ask/response call.
   Default: sonar
+
+param.test_connectivity = <bool> Side-effect-free credential check mode. When enabled (1),
+  the action skips ALL normal processing (no result rows are read, nothing is sent to Slack,
+  nothing is written back to any notable comment or KV store record) and instead resolves +
+  probes each configured credential: Slack via auth.test (no message posted), Perplexity via a
+  minimal 1-token completion (only if perplexity_enabled=1). Outcomes are logged unambiguously
+  as SLACK/PERPLEXITY AUTH OK, AUTH FAILURE, or AUTH SKIPPED in
+  notable_to_perplexity_json.log. Intended for ad-hoc manual invocation via Splunk's sendalert
+  search command, not for use on a real correlation search. Default: 0
