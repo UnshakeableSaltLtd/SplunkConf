@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.1
+**Version:** 1.4.2
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -185,6 +185,46 @@ delivery/answering (not just the test mode) — if a live Slack send fails becau
 bot token, or a `perplexity_ask` call gets a 401/403, the log line makes that unmistakable rather
 than burying it in a generic Python traceback.
 
+## Local testing without a Splunk instance (`test_harness.py`)
+
+`bin/test_harness.py` is a standalone dev/test tool (not registered in `alert_actions.conf`, never
+invoked by Splunk itself) that sends a Splunk-alert-action-style JSON payload to either script on
+stdin - exactly the way Splunk does - so you can test `alert_actions.conf`'s actual configured
+values (template, model, delivery method, credentials) from a laptop with no Splunk instance, no
+correlation search, and no real notable required:
+
+```bash
+# Pure config/template check - no network calls, no credentials needed:
+python3 bin/test_harness.py perplexity --dry-run
+python3 bin/test_harness.py slack --dry-run
+
+# Same side-effect-free connectivity probe as `sendalert ... param.test_connectivity=1` above,
+# runnable standalone (plaintext credential override shown; a realm + --server-uri/--session-key
+# pointed at a real Splunk vault works too):
+python3 bin/test_harness.py perplexity --test-connectivity --override perplexity_api_key=pplx-...
+python3 bin/test_harness.py slack --test-connectivity --override slack_bot_token=xoxb-...
+
+# Full run against a real credential, overriding sample event fields, tailing the resulting log:
+python3 bin/test_harness.py perplexity \
+    --override perplexity_api_key=pplx-... \
+    --field repo=some-org/some-repo --field user=jdoe --field src=1.2.3.4 --show-log
+
+# Run both actions back to back against the same event fields, to compare their output:
+python3 bin/test_harness.py both --field repo=octocat/Hello-World --dry-run
+```
+
+`--dry-run` reads the real stanza from `default/alert_actions.conf` and, using `ta_common`
+directly, builds and prints both the raw payload and the fully substituted/JSON-parsed envelope -
+so a broken `additional_fields` template (bad JSON, wrong token name) shows up immediately as a
+parse error, with zero network calls or credentials involved. A real (non-dry-run) invocation pipes
+the same payload to the actual script via `subprocess`, prints its exit code and stdout/stderr, and
+(`--show-log`) tails its log file - logs land under `.test_harness_home/` next to this README by
+default (already excluded from git via this repo's `.gitignore`). Run
+`python3 bin/test_harness.py --help` for the full flag reference (`--override` for
+`configuration`/`param.*` values, `--field`/`--result-file` for the sample event row, `--sid`,
+`--search-name`, `--server-uri`/`--session-key` to exercise real vault-realm credential resolution
+instead of a plaintext override, etc.).
+
 ## GUI: README + Setup pages
 
 Since 1.4.0 the app is visible in Splunk Web's app nav (`is_visible = 1`) with two pages:
@@ -245,6 +285,7 @@ Since 1.4.0 the app is visible in Splunk Web's app nav (`is_visible = 1`) with t
 | `bin/ta_common.py` | Shared code used by both actions — payload building, credential vault lookups (Slack + Perplexity), the Perplexity API call, Slack delivery helpers, notable comment write-back, KV store write, and both `check_slack_connectivity()`/`check_perplexity_connectivity()` probes. Each caller passes in its own `log`/`app_name` so log lines land in that script's own log file. |
 | `bin/notable_to_perplexity_json.py` | Agentic response action — answers `perplexity_ask` synchronously via Perplexity, Adaptive Response panel status, notable comment write-back, KV store enrichment write. No Slack objects. |
 | `bin/notable_to_slack_json.py` | Slack notification action — builds the same JSON envelope (unanswered) and delivers to Slack, Adaptive Response panel status, notable comment write-back, KV store enrichment write. No Perplexity objects. |
+| `bin/test_harness.py` | Standalone dev/test tool (not registered in `alert_actions.conf`, never invoked by Splunk) — sends a Splunk-alert-action-style payload to either script on stdin to test `alert_actions.conf`'s real config without a live Splunk instance. See "Local testing without a Splunk instance" above. |
 | `default/collections.conf` | `notable_agentic_enrichment` KV store collection schema (shared by both actions) |
 | `default/transforms.conf` | `notable_agentic_enrichment_lookup` — lookup wrapper for reading the collection via SPL |
 | `default/data/ui/views/notable_agentic_enrichment_drilldown.xml` | Dashboard rendering the enrichment record(s) (from either/both actions) for a given `sid`/`rid` |
@@ -260,6 +301,22 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.2
+
+- **Added `bin/test_harness.py`** — a standalone dev/test tool that sends a Splunk-alert-action-style
+  JSON payload to either `notable_to_perplexity_json.py` or `notable_to_slack_json.py` on stdin,
+  exactly as Splunk itself would invoke them. Reads the real stanza out of `default/alert_actions.conf`
+  so it tests the *actual configured* `additional_fields` template, model, delivery method, etc.
+  (with `--override`/`--field` to tweak values ad hoc), and requires no live Splunk instance,
+  correlation search, or real notable. Supports a `--dry-run` mode (builds and prints the payload plus
+  the `ta_common.build_payload()` envelope with tokens substituted — zero network calls, no
+  credentials needed) and a real-invocation mode that pipes to the actual script via `subprocess` and
+  can tail the resulting log file. Not registered in `alert_actions.conf` and not part of the app's
+  Splunk-invoked surface — dev/test tooling only. See "Local testing without a Splunk instance" above
+  for usage examples.
+- Version bumped **1.4.1 → 1.4.2** (patch bump — new dev/test tooling only, no behavioral change to
+  either shipped alert action).
 
 ### 1.4.1
 

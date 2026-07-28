@@ -202,7 +202,7 @@
 </header>
 <h1 id="ta_responseactions">TA_ResponseActions</h1>
 <p><strong>App Name:</strong> Notable to Perplexity / Slack
-<strong>Version:</strong> 1.4.1 <strong>Author:</strong> David Pollard,
+<strong>Version:</strong> 1.4.2 <strong>Author:</strong> David Pollard,
 Unshakeable Salt Ltd <strong>Associated Session:</strong> <a
 href="../SEC1215/README.md">SEC1215 — From Zero to Agentic</a></p>
 <h2 id="overview">Overview</h2>
@@ -328,7 +328,7 @@ text. Both actions write to the <strong>same</strong> collection, so a
 single dashboard shows both actions' records for a given
 <code>sid</code>/<code>rid</code>.</li>
 </ol>
-<h3 id="kv-store-enrichment--custom-drilldown">KV store enrichment /
+<h3 id="kv-store-enrichment-custom-drilldown">KV store enrichment /
 custom drilldown</h3>
 <p><code>/services/notable_update</code> only supports
 <code>comment</code>/<code>status</code>/<code>urgency</code>/<code>newOwner</code>/<code>disposition</code>
@@ -380,7 +380,7 @@ already loaded — no re-typing tokens.</p>
 <code>[collections/notable_agentic_enrichment]</code> write ACL if the
 role that invokes either action (correlation search owner, or an analyst
 running it ad hoc) isn't <code>admin</code>.</p>
-<h2 id="testing-connectivity--credentials">Testing connectivity /
+<h2 id="testing-connectivity-credentials">Testing connectivity /
 credentials</h2>
 <p>Each action's credential can silently go bad between deployments
 (rotated, revoked, expired, realm renamed) without anyone noticing until
@@ -425,6 +425,10 @@ and <code>$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log</code>
 respectively (each action now logs to its own file — see Release Notes
 1.4.0) and grep for one of these unambiguous outcome lines:</p>
 <table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
 <thead>
 <tr>
 <th>Log line prefix</th>
@@ -472,7 +476,53 @@ never a question you have to guess at from a missing log entry.</p>
 live Slack send fails because Slack rejects the bot token, or a
 <code>perplexity_ask</code> call gets a 401/403, the log line makes that
 unmistakable rather than burying it in a generic Python traceback.</p>
-<h2 id="gui-readme--setup-pages">GUI: README + Setup pages</h2>
+<h2 id="local-testing-without-a-splunk-instance-test_harness.py">Local
+testing without a Splunk instance (<code>test_harness.py</code>)</h2>
+<p><code>bin/test_harness.py</code> is a standalone dev/test tool (not
+registered in <code>alert_actions.conf</code>, never invoked by Splunk
+itself) that sends a Splunk-alert-action-style JSON payload to either
+script on stdin - exactly the way Splunk does - so you can test
+<code>alert_actions.conf</code>'s actual configured values (template,
+model, delivery method, credentials) from a laptop with no Splunk
+instance, no correlation search, and no real notable required:</p>
+<pre class="bash"><code># Pure config/template check - no network calls, no credentials needed:
+python3 bin/test_harness.py perplexity --dry-run
+python3 bin/test_harness.py slack --dry-run
+
+# Same side-effect-free connectivity probe as `sendalert ... param.test_connectivity=1` above,
+# runnable standalone (plaintext credential override shown; a realm + --server-uri/--session-key
+# pointed at a real Splunk vault works too):
+python3 bin/test_harness.py perplexity --test-connectivity --override perplexity_api_key=pplx-...
+python3 bin/test_harness.py slack --test-connectivity --override slack_bot_token=xoxb-...
+
+# Full run against a real credential, overriding sample event fields, tailing the resulting log:
+python3 bin/test_harness.py perplexity \
+    --override perplexity_api_key=pplx-... \
+    --field repo=some-org/some-repo --field user=jdoe --field src=1.2.3.4 --show-log
+
+# Run both actions back to back against the same event fields, to compare their output:
+python3 bin/test_harness.py both --field repo=octocat/Hello-World --dry-run</code></pre>
+<p><code>--dry-run</code> reads the real stanza from
+<code>default/alert_actions.conf</code> and, using
+<code>ta_common</code> directly, builds and prints both the raw payload
+and the fully substituted/JSON-parsed envelope - so a broken
+<code>additional_fields</code> template (bad JSON, wrong token name)
+shows up immediately as a parse error, with zero network calls or
+credentials involved. A real (non-dry-run) invocation pipes the same
+payload to the actual script via <code>subprocess</code>, prints its
+exit code and stdout/stderr, and (<code>--show-log</code>) tails its log
+file - logs land under <code>.test_harness_home/</code> next to this
+README by default (already excluded from git via this repo's
+<code>.gitignore</code>). Run
+<code>python3 bin/test_harness.py --help</code> for the full flag
+reference (<code>--override</code> for
+<code>configuration</code>/<code>param.*</code> values,
+<code>--field</code>/<code>--result-file</code> for the sample event
+row, <code>--sid</code>, <code>--search-name</code>,
+<code>--server-uri</code>/<code>--session-key</code> to exercise real
+vault-realm credential resolution instead of a plaintext override,
+etc.).</p>
+<h2 id="gui-readme-setup-pages">GUI: README + Setup pages</h2>
 <p>Since 1.4.0 the app is visible in Splunk Web's app nav
 (<code>is_visible = 1</code>) with two pages:</p>
 <ul>
@@ -545,6 +595,10 @@ valid before relying on a live notable.</p></li>
 </ol>
 <h2 id="files">Files</h2>
 <table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
 <thead>
 <tr>
 <th>Path</th>
@@ -586,6 +640,14 @@ comment write-back, KV store enrichment write. No Slack objects.</td>
 (unanswered) and delivers to Slack, Adaptive Response panel status,
 notable comment write-back, KV store enrichment write. No Perplexity
 objects.</td>
+</tr>
+<tr>
+<td><code>bin/test_harness.py</code></td>
+<td>Standalone dev/test tool (not registered in
+<code>alert_actions.conf</code>, never invoked by Splunk) — sends a
+Splunk-alert-action-style payload to either script on stdin to test
+<code>alert_actions.conf</code>'s real config without a live Splunk
+instance. See "Local testing without a Splunk instance" above.</td>
 </tr>
 <tr>
 <td><code>default/collections.conf</code></td>
@@ -647,7 +709,30 @@ Incident Review</td>
 and <code>$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log</code>
 (separate files since 1.4.0).</p>
 <h2 id="release-notes">Release Notes</h2>
-<h3 id="141">1.4.1</h3>
+<h3 id="section">1.4.2</h3>
+<ul>
+<li><strong>Added <code>bin/test_harness.py</code></strong> — a
+standalone dev/test tool that sends a Splunk-alert-action-style JSON
+payload to either <code>notable_to_perplexity_json.py</code> or
+<code>notable_to_slack_json.py</code> on stdin, exactly as Splunk itself
+would invoke them. Reads the real stanza out of
+<code>default/alert_actions.conf</code> so it tests the <em>actual
+configured</em> <code>additional_fields</code> template, model, delivery
+method, etc. (with <code>--override</code>/<code>--field</code> to tweak
+values ad hoc), and requires no live Splunk instance, correlation
+search, or real notable. Supports a <code>--dry-run</code> mode (builds
+and prints the payload plus the <code>ta_common.build_payload()</code>
+envelope with tokens substituted — zero network calls, no credentials
+needed) and a real-invocation mode that pipes to the actual script via
+<code>subprocess</code> and can tail the resulting log file. Not
+registered in <code>alert_actions.conf</code> and not part of the app's
+Splunk-invoked surface — dev/test tooling only. See "Local testing
+without a Splunk instance" above for usage examples.</li>
+<li>Version bumped <strong>1.4.1 → 1.4.2</strong> (patch bump — new
+dev/test tooling only, no behavioral change to either shipped alert
+action).</li>
+</ul>
+<h3 id="section-1">1.4.1</h3>
 <ul>
 <li><strong>Renamed the shared KV store collection, lookup, and
 drilldown dashboard away from their Slack-specific names</strong>, since
@@ -686,7 +771,7 @@ the note in "Installation" below.</li>
 naming/documentation fix only, no behavioral change to either action's
 logic).</li>
 </ul>
-<h3 id="140">1.4.0</h3>
+<h3 id="section-2">1.4.0</h3>
 <ul>
 <li><strong>Split the single combined action into two independent
 Adaptive Response actions</strong>, so the agentic flow and the
@@ -742,7 +827,7 @@ up</strong>.</li>
 explicitly requested — this is a breaking change to the alert action's
 shape, not a patch).</li>
 </ul>
-<h3 id="134">1.3.4</h3>
+<h3 id="section-3">1.3.4</h3>
 <ul>
 <li>Added <code>param.test_connectivity</code> — a side-effect-free
 credential check mode (see "Testing connectivity / credentials" above).
@@ -777,7 +862,7 @@ outcome.</li>
 error code) when the token itself is the problem, in addition to the
 existing generic failure logging for non-auth errors.</li>
 </ul>
-<h3 id="133">1.3.3</h3>
+<h3 id="section-4">1.3.3</h3>
 <ul>
 <li><strong>Replaced the Slack → HEC bridge
 (<code>bin/slack_hec_bridge.py</code>, 1.3.1–1.3.2) with a synchronous
@@ -809,7 +894,7 @@ instructing the model to reply with raw JSON text in Slack).</li>
 <li>Slack delivery itself is unchanged — still useful for visually
 auditing what was asked and answered.</li>
 </ul>
-<h3 id="132">1.3.2</h3>
+<h3 id="section-5">1.3.2</h3>
 <ul>
 <li>Fixed <code>README/alert_actions.conf.spec</code> for
 <code>[notable_to_perplexity_json]</code>: added the missing
@@ -851,7 +936,7 @@ Add-on Builder thread</a> and <a
 href="https://community.splunk.com/t5/Splunk-On-Call/Invalid-key-in-stanza/m-p/477090">VictorOps
 app thread</a>, confirm the same root cause.)</li>
 </ul>
-<h3 id="131">1.3.1</h3>
+<h3 id="section-6">1.3.1</h3>
 <ul>
 <li>Added <code>bin/slack_hec_bridge.py</code>, a classic scripted input
 (<code>default/inputs.conf</code>, <code>README/inputs.conf.spec</code>)
@@ -887,7 +972,7 @@ extended with <code>slack_thread_ts</code>,
 token/<code>conversations.read</code> scope to read a reply back
 with.</li>
 </ul>
-<h3 id="130">1.3.0</h3>
+<h3 id="section-7">1.3.0</h3>
 <ul>
 <li><code>param.additional_fields</code> now ships a default
 <code>perplexity_ask</code> block with three standing checks run against
@@ -903,7 +988,7 @@ instead of the old <code>:rotating_light:</code>/SID-only line. Event
 time is read from the notable's own <code>_time</code> field where
 available, falling back to the send timestamp.</li>
 </ul>
-<h3 id="120">1.2.0</h3>
+<h3 id="section-8">1.2.0</h3>
 <ul>
 <li>Added <code>param.write_back_kvstore</code> — persists a structured
 enrichment record (event_id, delivery method, Slack channel,
@@ -922,7 +1007,7 @@ for the KV store lookup + view.</li>
 PyInstaller <code>*.spec</code> rule) that was silently excluding
 Splunk's <code>.conf.spec</code> convention files from commits.</li>
 </ul>
-<h3 id="110">1.1.0</h3>
+<h3 id="section-9">1.1.0</h3>
 <ul>
 <li>Added native Incident Review "Adaptive Responses" panel reporting
 via <code>cim_actions.ModularAction.message()</code>.</li>
@@ -931,7 +1016,7 @@ to the triggering notable via <code>/services/notable_update</code> so
 the collected Slack data appears in that notable's own Activity timeline
 for analysts.</li>
 </ul>
-<h3 id="100">1.0.0</h3>
+<h3 id="section-10">1.0.0</h3>
 <ul>
 <li>Initial release: full-JSON notable delivery to Slack via bot token
 (file_upload) or webhook, configurable additional fields, credential
