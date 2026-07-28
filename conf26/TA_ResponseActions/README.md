@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.2
+**Version:** 1.4.3
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -151,8 +151,8 @@ or KV store record — and instead just resolves and probes its own credential:
 - **Slack** (`notable_to_slack_json` only) — calls `auth.test` (no message posted, no file
   uploaded). Skipped entirely if no `param.slack_bot_token`/`param.slack_bot_token_realm` is
   configured.
-- **Perplexity** (`notable_to_perplexity_json` only) — sends a minimal 1-token completion request.
-  Skipped if `param.perplexity_enabled` is off, or if no
+- **Perplexity** (`notable_to_perplexity_json` only) — sends a minimal (16-token, the API's
+  current minimum) completion request. Skipped if `param.perplexity_enabled` is off, or if no
   `param.perplexity_api_key`/`param.perplexity_api_key_realm` is configured.
 
 Invoke either ad hoc via Splunk's built-in `sendalert` search command — this works from Splunk
@@ -301,6 +301,19 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.3
+
+- **Fixed `check_perplexity_connectivity()`'s test call**: it hardcoded `max_tokens=5`, but
+  `api.perplexity.ai` now rejects any request with `max_tokens < 16` (HTTP 400
+  `max_tokens must be at least 16`). This meant `param.test_connectivity=1` on
+  `notable_to_perplexity_json` — and `test_harness.py perplexity --test-connectivity` — always
+  reported failure even with a fully valid API key, misreporting a real credential as broken.
+  Found by testing `test_harness.py` end-to-end against a live Perplexity API key. Bumped the probe
+  to `max_tokens=16` (the API's current minimum). The main enrichment path
+  (`get_perplexity_response()`) was never affected — it doesn't pass `max_tokens` at all, so it was
+  never subject to this minimum.
+- Version bumped **1.4.2 → 1.4.3** (patch bump — bug fix only, no interface changes).
 
 ### 1.4.2
 

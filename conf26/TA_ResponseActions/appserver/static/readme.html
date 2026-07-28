@@ -166,7 +166,7 @@
       vertical-align: middle;
     }
     .display.math{display: block; text-align: center; margin: 0.5rem auto;}
-  
+
     table {
       border-collapse: collapse;
       width: 100%;
@@ -202,7 +202,7 @@
 </header>
 <h1 id="ta_responseactions">TA_ResponseActions</h1>
 <p><strong>App Name:</strong> Notable to Perplexity / Slack
-<strong>Version:</strong> 1.4.2 <strong>Author:</strong> David Pollard,
+<strong>Version:</strong> 1.4.3 <strong>Author:</strong> David Pollard,
 Unshakeable Salt Ltd <strong>Associated Session:</strong> <a
 href="../SEC1215/README.md">SEC1215 — From Zero to Agentic</a></p>
 <h2 id="overview">Overview</h2>
@@ -409,8 +409,9 @@ Skipped entirely if no
 <code>param.slack_bot_token</code>/<code>param.slack_bot_token_realm</code>
 is configured.</li>
 <li><strong>Perplexity</strong> (<code>notable_to_perplexity_json</code>
-only) — sends a minimal 1-token completion request. Skipped if
-<code>param.perplexity_enabled</code> is off, or if no
+only) — sends a minimal (16-token, the API's current minimum) completion
+request. Skipped if <code>param.perplexity_enabled</code> is off, or if
+no
 <code>param.perplexity_api_key</code>/<code>param.perplexity_api_key_realm</code>
 is configured.</li>
 </ul>
@@ -709,7 +710,27 @@ Incident Review</td>
 and <code>$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log</code>
 (separate files since 1.4.0).</p>
 <h2 id="release-notes">Release Notes</h2>
-<h3 id="section">1.4.2</h3>
+<h3 id="section">1.4.3</h3>
+<ul>
+<li><strong>Fixed <code>check_perplexity_connectivity()</code>'s test
+call</strong>: it hardcoded <code>max_tokens=5</code>, but
+<code>api.perplexity.ai</code> now rejects any request with
+<code>max_tokens &lt; 16</code> (HTTP 400
+<code>max_tokens must be at least 16</code>). This meant
+<code>param.test_connectivity=1</code> on
+<code>notable_to_perplexity_json</code> — and
+<code>test_harness.py perplexity --test-connectivity</code> — always
+reported failure even with a fully valid API key, misreporting a real
+credential as broken. Found by testing <code>test_harness.py</code>
+end-to-end against a live Perplexity API key. Bumped the probe to
+<code>max_tokens=16</code> (the API's current minimum). The main
+enrichment path (<code>get_perplexity_response()</code>) was never
+affected — it doesn't pass <code>max_tokens</code> at all, so it was
+never subject to this minimum.</li>
+<li>Version bumped <strong>1.4.2 → 1.4.3</strong> (patch bump — bug fix
+only, no interface changes).</li>
+</ul>
+<h3 id="section-1">1.4.2</h3>
 <ul>
 <li><strong>Added <code>bin/test_harness.py</code></strong> — a
 standalone dev/test tool that sends a Splunk-alert-action-style JSON
@@ -732,7 +753,7 @@ without a Splunk instance" above for usage examples.</li>
 dev/test tooling only, no behavioral change to either shipped alert
 action).</li>
 </ul>
-<h3 id="section-1">1.4.1</h3>
+<h3 id="section-2">1.4.1</h3>
 <ul>
 <li><strong>Renamed the shared KV store collection, lookup, and
 drilldown dashboard away from their Slack-specific names</strong>, since
@@ -771,7 +792,7 @@ the note in "Installation" below.</li>
 naming/documentation fix only, no behavioral change to either action's
 logic).</li>
 </ul>
-<h3 id="section-2">1.4.0</h3>
+<h3 id="section-3">1.4.0</h3>
 <ul>
 <li><strong>Split the single combined action into two independent
 Adaptive Response actions</strong>, so the agentic flow and the
@@ -827,7 +848,7 @@ up</strong>.</li>
 explicitly requested — this is a breaking change to the alert action's
 shape, not a patch).</li>
 </ul>
-<h3 id="section-3">1.3.4</h3>
+<h3 id="section-4">1.3.4</h3>
 <ul>
 <li>Added <code>param.test_connectivity</code> — a side-effect-free
 credential check mode (see "Testing connectivity / credentials" above).
@@ -862,7 +883,7 @@ outcome.</li>
 error code) when the token itself is the problem, in addition to the
 existing generic failure logging for non-auth errors.</li>
 </ul>
-<h3 id="section-4">1.3.3</h3>
+<h3 id="section-5">1.3.3</h3>
 <ul>
 <li><strong>Replaced the Slack → HEC bridge
 (<code>bin/slack_hec_bridge.py</code>, 1.3.1–1.3.2) with a synchronous
@@ -894,7 +915,7 @@ instructing the model to reply with raw JSON text in Slack).</li>
 <li>Slack delivery itself is unchanged — still useful for visually
 auditing what was asked and answered.</li>
 </ul>
-<h3 id="section-5">1.3.2</h3>
+<h3 id="section-6">1.3.2</h3>
 <ul>
 <li>Fixed <code>README/alert_actions.conf.spec</code> for
 <code>[notable_to_perplexity_json]</code>: added the missing
@@ -936,7 +957,7 @@ Add-on Builder thread</a> and <a
 href="https://community.splunk.com/t5/Splunk-On-Call/Invalid-key-in-stanza/m-p/477090">VictorOps
 app thread</a>, confirm the same root cause.)</li>
 </ul>
-<h3 id="section-6">1.3.1</h3>
+<h3 id="section-7">1.3.1</h3>
 <ul>
 <li>Added <code>bin/slack_hec_bridge.py</code>, a classic scripted input
 (<code>default/inputs.conf</code>, <code>README/inputs.conf.spec</code>)
@@ -972,7 +993,7 @@ extended with <code>slack_thread_ts</code>,
 token/<code>conversations.read</code> scope to read a reply back
 with.</li>
 </ul>
-<h3 id="section-7">1.3.0</h3>
+<h3 id="section-8">1.3.0</h3>
 <ul>
 <li><code>param.additional_fields</code> now ships a default
 <code>perplexity_ask</code> block with three standing checks run against
@@ -988,7 +1009,7 @@ instead of the old <code>:rotating_light:</code>/SID-only line. Event
 time is read from the notable's own <code>_time</code> field where
 available, falling back to the send timestamp.</li>
 </ul>
-<h3 id="section-8">1.2.0</h3>
+<h3 id="section-9">1.2.0</h3>
 <ul>
 <li>Added <code>param.write_back_kvstore</code> — persists a structured
 enrichment record (event_id, delivery method, Slack channel,
@@ -1007,7 +1028,7 @@ for the KV store lookup + view.</li>
 PyInstaller <code>*.spec</code> rule) that was silently excluding
 Splunk's <code>.conf.spec</code> convention files from commits.</li>
 </ul>
-<h3 id="section-9">1.1.0</h3>
+<h3 id="section-10">1.1.0</h3>
 <ul>
 <li>Added native Incident Review "Adaptive Responses" panel reporting
 via <code>cim_actions.ModularAction.message()</code>.</li>
@@ -1016,7 +1037,7 @@ to the triggering notable via <code>/services/notable_update</code> so
 the collected Slack data appears in that notable's own Activity timeline
 for analysts.</li>
 </ul>
-<h3 id="section-10">1.0.0</h3>
+<h3 id="section-11">1.0.0</h3>
 <ul>
 <li>Initial release: full-JSON notable delivery to Slack via bot token
 (file_upload) or webhook, configurable additional fields, credential

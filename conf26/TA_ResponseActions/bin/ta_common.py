@@ -627,7 +627,7 @@ def check_perplexity_connectivity(cfg, server_uri, session_key, app, log):
         call_perplexity_api(
             api_key, model,
             [{"role": "user", "content": "Reply with exactly: OK"}],
-            max_tokens=5,
+            max_tokens=16,  # api.perplexity.ai now rejects max_tokens<16 with HTTP 400
             timeout=15,
         )
     except PerplexityApiError as e:
