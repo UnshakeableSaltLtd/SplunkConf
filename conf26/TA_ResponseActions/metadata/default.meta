@@ -17,3 +17,11 @@ export = system
 [views/notable_slack_enrichment_drilldown]
 access = read : [ * ], write : [ admin ]
 export = system
+
+[views/readme]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[data/ui/nav]
+access = read : [ * ], write : [ admin ]
+export = system

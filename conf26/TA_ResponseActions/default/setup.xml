@@ -1,0 +1,47 @@
+<setup>
+  <block title="Slack Bot Token" endpoint="storage/passwords" entity="_new">
+    <text>
+      Stores the Slack bot token (xoxb-...) used by "Send Notable to Slack (ES Findings)"
+      (bin/notable_to_slack_json.py) for file_upload delivery to the #es-findings channel.
+      Enter "slack_notable_action" for both Username and Realm below - this is the exact
+      realm name notable_to_slack_json.py's param.slack_bot_token_realm already expects, so no
+      further configuration is needed on the alert action itself. Leave blank and save nothing
+      here if you plan to use webhook delivery instead, or param.slack_bot_token (plaintext)
+      directly on the action.
+    </text>
+    <input field="name">
+      <label>Username (enter: slack_notable_action)</label>
+      <type>text</type>
+    </input>
+    <input field="realm">
+      <label>Realm (enter: slack_notable_action)</label>
+      <type>text</type>
+    </input>
+    <input field="password">
+      <label>Slack Bot Token</label>
+      <type>password</type>
+    </input>
+  </block>
+  <block title="Perplexity API Key" endpoint="storage/passwords" entity="_new">
+    <text>
+      Stores the Perplexity API key used by "Send Notable to Perplexity API (Agentic Response)"
+      (bin/notable_to_perplexity_json.py) to answer each notable's "perplexity_ask" block
+      synchronously. Get a key at https://www.perplexity.ai/settings/api. Enter
+      "perplexity_notable_action" for both Username and Realm below - this is the exact realm
+      name notable_to_perplexity_json.py's param.perplexity_api_key_realm already expects, so no
+      further configuration is needed on the alert action itself.
+    </text>
+    <input field="name">
+      <label>Username (enter: perplexity_notable_action)</label>
+      <type>text</type>
+    </input>
+    <input field="realm">
+      <label>Realm (enter: perplexity_notable_action)</label>
+      <type>text</type>
+    </input>
+    <input field="password">
+      <label>Perplexity API Key</label>
+      <type>password</type>
+    </input>
+  </block>
+</setup>

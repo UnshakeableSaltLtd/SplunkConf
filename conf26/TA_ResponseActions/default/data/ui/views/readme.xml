@@ -1,0 +1,18 @@
+<form version="1.1" theme="light">
+  <label>README</label>
+  <fieldset submitButton="false"></fieldset>
+  <row>
+    <panel>
+      <title>TA_ResponseActions - README</title>
+      <html>
+        <p>
+          Rendered from this app's own <code>README.md</code>. See
+          <a href="https://github.com/UnshakeableSaltLtd/SplunkConf/tree/main/conf26/TA_ResponseActions" target="_blank">the GitHub repo</a>
+          for the source of truth, or use the <b>Set up</b> page (Manage Apps &gt; TA_ResponseActions &gt; Set up)
+          to submit/update the Slack bot token and Perplexity API key.
+        </p>
+        <iframe src="/static/app/TA_ResponseActions/readme.html" style="width:100%; height:1400px; border:1px solid #d5d5d5;"></iframe>
+      </html>
+    </panel>
+  </row>
+</form>

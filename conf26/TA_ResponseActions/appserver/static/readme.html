@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>TA_ResponseActions README</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 62em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    pre, code {
+      background-color: #f5f5f5;
+    }
+    pre {
+      padding: 10px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">TA_ResponseActions README</h1>
+</header>
+<h1 id="ta_responseactions">TA_ResponseActions</h1>
+<p><strong>App Name:</strong> Notable to Perplexity / Slack
+<strong>Version:</strong> 1.4.0 <strong>Author:</strong> David Pollard,
+Unshakeable Salt Ltd <strong>Associated Session:</strong> <a
+href="../SEC1215/README.md">SEC1215 — From Zero to Agentic</a></p>
+<h2 id="overview">Overview</h2>
+<p>Two independent, custom Splunk Enterprise Security <strong>Adaptive
+Response Actions</strong>, split apart in 1.4.0 so the agentic flow and
+the human-notification flow can be enabled, disabled, or have their
+credentials rotated completely independently:</p>
+<ul>
+<li><strong><code>notable_to_perplexity_json</code></strong> — <em>"Send
+Notable to Perplexity API (Agentic Response)"</em>. Part of the agentic
+response process: answers the notable's <code>perplexity_ask</code>
+block synchronously via the Perplexity API and writes the result back to
+the same notable. <strong>No Slack objects at all.</strong></li>
+<li><strong><code>notable_to_slack_json</code></strong> — <em>"Send
+Notable to Slack (ES Findings)"</em>. <strong>Not</strong> part of the
+agentic response process: posts the triggering Notable/Finding to the
+<code>#es-findings</code> Slack channel as a complete JSON payload — the
+exact same envelope shape built for the Perplexity call, but never
+answered (this action never calls Perplexity).</li>
+</ul>
+<p>Both share <code>bin/ta_common.py</code> for payload construction,
+credential vault lookups, and write-back-to-notable helpers, so the two
+stay in lockstep on payload shape while remaining independently
+configurable.</p>
+<p><code>notable_to_slack_json</code>'s two delivery modes (unchanged
+from pre-split):</p>
+<ul>
+<li><strong>file_upload</strong> (recommended) — uses a Slack bot token
+via <code>files.getUploadURLExternal</code> /
+<code>files.completeUploadExternal</code> to deliver the entire JSON
+with no size limit (<a
+href="https://slack.com/help/articles/4426294050451-Slack-feature-and-plan-retirements">Slack
+retired <code>files.upload</code> on 2025-11-12</a>).</li>
+<li><strong>webhook</strong> — quick to set up via an Incoming Webhook,
+but truncates large payloads to fit Slack's block limits.</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Splunk Enterprise Security 7.x+ on Splunk Enterprise 9.x/10.x</li>
+<li>Python 3.x (bundled with Splunk)</li>
+<li>A Slack app with a bot token scoped <code>files:write</code>,
+<code>chat:write</code> (only needed for
+<code>notable_to_slack_json</code>)</li>
+<li>A <a href="https://www.perplexity.ai/settings/api">Perplexity API
+key</a> (only needed for <code>notable_to_perplexity_json</code>'s
+synchronous <code>perplexity_ask</code>/<code>perplexity_response</code>
+call — see below)</li>
+<li><code>Splunk_SA_CIM</code> (Common Information Model Add-on) — ships
+by default with every ES install. Required for the native Adaptive
+Response panel status reporting below (both actions degrade gracefully
+and still run their normal flow if it's missing)</li>
+</ul>
+<h2 id="perplexity-api-synchronous-askresponse-agentic-flow">Perplexity
+API: synchronous ask/response (agentic flow)</h2>
+<p><code>param.additional_fields</code> (on both actions, from the same
+default template) ships a standing <code>perplexity_ask</code> block
+with three checks run against every notable: is
+<code>$result.repo$</code> a repo commonly seen for this kind of
+finding, is <code>$result.user$</code> an expected/authorized user, and
+is <code>$result.src$</code> a low-threat source IP.</p>
+<p><code>notable_to_perplexity_json</code> — when
+<code>param.perplexity_enabled</code> is on (default) — answers that
+block <strong>in-line, synchronously</strong> — a single call to the <a
+href="https://docs.perplexity.ai/">Perplexity Chat Completions API</a>
+with a JSON schema <code>response_format</code> built from the ask keys
+plus an <code>overall</code> risk read-out. The result is merged back
+into the same <code>additional_fields</code> object as
+<code>perplexity_response</code>, then travels through:</p>
+<ol type="1">
+<li><strong>The notable comment write-back</strong>
+(<code>param.write_back_comment</code>).</li>
+<li><strong>The KV store enrichment record</strong>
+(<code>param.write_back_kvstore</code>), so the drilldown dashboard
+shows the ask and the answer side by side.</li>
+</ol>
+<p><code>notable_to_slack_json</code> builds the <strong>same</strong>
+<code>perplexity_ask</code> envelope and posts it to Slack, but
+<strong>never answers it</strong> — no Perplexity call is made from that
+action at all. This is deliberate: it keeps the human-notification
+channel free of any dependency on the Perplexity credential, and gives
+analysts a way to visually audit exactly what was asked, separately from
+whether/how it was answered.</p>
+<p>No separate index, credential realm, polling interval, or scripted
+input is required — the alert action already has full notable context at
+send time, so there's nothing to hand off. An earlier design
+(<code>bin/slack_hec_bridge.py</code>, shipped in 1.3.1–1.3.2) polled
+Slack asynchronously for a reply and mapped it onto CIM Risk fields via
+HEC; it worked, but added a second moving part (polling interval,
+thread-ts plumbing, a fixed reply-format contract) to answer questions
+this action already had the answer to. It's kept only as a documented
+"before" lesson — see <a
+href="../SEC1215/lessons/README.md"><code>../SEC1215/lessons/README.md</code></a>
+for the full write-up of why it was retired.</p>
+<h2 id="closing-the-loop-getting-the-result-back-to-the-analyst">Closing
+the loop: getting the result back to the analyst</h2>
+<p>After processing, <strong>both</strong> actions write back to the
+<strong>same</strong> notable so the analyst sees the result alongside
+the rest of the event, without leaving Incident Review:</p>
+<ol type="1">
+<li><strong>Adaptive Responses panel</strong> — each action is built on
+<code>cim_actions.py</code>'s <code>ModularAction</code> class and calls
+<code>self.message(..., status='success'/'failure')</code>. This
+populates the notable's native "Adaptive Responses" section / "View
+Adaptive Response Invocations" audit trail (backed by the
+<code>Splunk_Audit.Modular_Actions</code> data model), typically visible
+within ~5 minutes.</li>
+<li><strong>Notable comment (<code>param.write_back_comment</code>,
+default on)</strong> — each action calls
+<code>POST /services/notable_update</code> with
+<code>ruleUIDs=&lt;event_id&gt;</code> and a <code>comment</code>
+summarizing what happened (for <code>notable_to_perplexity_json</code>:
+the ask/response pair; for <code>notable_to_slack_json</code>: delivery
+method, timestamp, <code>additional_fields</code>). This is a permanent
+entry in that notable's own Activity timeline, so any analyst who later
+opens the notable sees it directly — this only works when the action
+runs in a notable context (i.e. <code>event_id</code> is present on the
+triggering row) and only supports comment text, not new
+structured/columnar fields.</li>
+<li><strong>KV store enrichment + custom drilldown
+(<code>param.write_back_kvstore</code>, default on)</strong> — see
+below. Gives analysts genuinely structured fields, not just comment
+text. Both actions write to the <strong>same</strong> collection, so a
+single dashboard shows both actions' records for a given
+<code>sid</code>/<code>rid</code>.</li>
+</ol>
+<h3 id="kv-store-enrichment--custom-drilldown">KV store enrichment /
+custom drilldown</h3>
+<p><code>/services/notable_update</code> only supports
+<code>comment</code>/<code>status</code>/<code>urgency</code>/<code>newOwner</code>/<code>disposition</code>
+— no arbitrary new fields. To surface real structured data (delivery
+status, Slack channel or <code>perplexity_api</code>, the exact
+<code>additional_fields</code> sent, error detail on failure) next to
+the notable, each action also:</p>
+<ol type="1">
+<li>Writes a record to the
+<strong><code>notable_slack_enrichment</code></strong> KV store
+collection (<code>default/collections.conf</code>) via
+<code>POST /servicesNS/nobody/&lt;app&gt;/storage/collections/data/...</code>,
+keyed by <strong>this invocation's
+<code>sid</code>/<code>rid</code></strong> — not <code>event_id</code>.
+That's because Incident Review's custom <code>drilldown_uri</code> (in
+<code>param._cam</code>) only supports the tokens <code>$sid$</code>,
+<code>$rid$</code>, <code>$time$</code>, <code>$earliest$</code>,
+<code>$latest$</code>, <code>$action_name$</code> —
+<code>event_id</code> isn't one of them (<a
+href="https://community.splunk.com/t5/Splunk-Search/How-to-change-Custom-Adaptive-response-action-succ-td-p/310960">reference</a>).
+<code>event_id</code>/<code>orig_sid</code>/<code>orig_rid</code> are
+still stored on the record for ad hoc <code>event_id</code> lookups.
+<code>notable_to_perplexity_json</code>'s records set
+<code>delivery_method="perplexity_api"</code> and leave
+<code>slack_channel</code>/<code>slack_permalink</code> blank;
+<code>notable_to_slack_json</code>'s records set
+<code>delivery_method</code> to
+<code>file_upload</code>/<code>webhook</code> and populate those
+fields.</li>
+<li>Declares
+<code>param._cam = {"supports_adhoc": true, "drilldown_uri": "notable_slack_enrichment_drilldown?form.sid=$sid$&amp;form.rid=$rid$", ...}</code>
+in <code>alert_actions.conf</code>. <code>supports_adhoc</code> is also
+what makes each action appear under Incident Review's <strong>Run
+Adaptive Response Actions</strong> ad hoc menu at all (<a
+href="https://community.splunk.com/t5/Splunk-Enterprise-Security/The-quot-Run-Adaptive-Response-Actions-quot-is-not-listing-all/m-p/472638">reference</a>).</li>
+<li>Both share a Simple XML view,
+<code>default/data/ui/views/notable_slack_enrichment_drilldown.xml</code>,
+that takes <code>sid</code>/<code>rid</code> from the drilldown URL and
+runs
+<code>| inputlookup notable_slack_enrichment_lookup where sid="$sid$" AND rid="$rid$"</code>
+(lookup defined in <code>default/transforms.conf</code>) to render the
+record(s) as a table — so if both actions fired for the same notable,
+both rows show up together.</li>
+</ol>
+<p>From a notable's Adaptive Responses panel, click through either
+action's entry and you land on that dashboard with the structured record
+already loaded — no re-typing tokens.</p>
+<p>Adjust <code>metadata/default.meta</code>'s
+<code>[collections/notable_slack_enrichment]</code> write ACL if the
+role that invokes either action (correlation search owner, or an analyst
+running it ad hoc) isn't <code>admin</code>.</p>
+<h2 id="testing-connectivity--credentials">Testing connectivity /
+credentials</h2>
+<p>Each action's credential can silently go bad between deployments
+(rotated, revoked, expired, realm renamed) without anyone noticing until
+the next real notable fires and delivery/answering fails.
+<code>param.test_connectivity</code> gives you a side-effect-free way to
+check each one independently, right now, without needing a real notable
+or firing any correlation search. Since the two actions were split, each
+now tests <strong>only its own</strong> credential:</p>
+<ul>
+<li><strong><code>notable_to_perplexity_json</code></strong> — tests the
+<strong>Perplexity</strong> credential only (no Slack credential exists
+on this action anymore).</li>
+<li><strong><code>notable_to_slack_json</code></strong> — tests the
+<strong>Slack</strong> credential only (no Perplexity credential exists
+on this action anymore).</li>
+</ul>
+<p>When <code>param.test_connectivity = 1</code> on either action, it
+skips <strong>all</strong> normal processing — no result rows are read,
+nothing is posted to Slack, nothing is written back to any notable
+comment or KV store record — and instead just resolves and probes its
+own credential:</p>
+<ul>
+<li><strong>Slack</strong> (<code>notable_to_slack_json</code> only) —
+calls <code>auth.test</code> (no message posted, no file uploaded).
+Skipped entirely if no
+<code>param.slack_bot_token</code>/<code>param.slack_bot_token_realm</code>
+is configured.</li>
+<li><strong>Perplexity</strong> (<code>notable_to_perplexity_json</code>
+only) — sends a minimal 1-token completion request. Skipped if
+<code>param.perplexity_enabled</code> is off, or if no
+<code>param.perplexity_api_key</code>/<code>param.perplexity_api_key_realm</code>
+is configured.</li>
+</ul>
+<p>Invoke either ad hoc via Splunk's built-in <code>sendalert</code>
+search command — this works from Splunk Web's Search app, no correlation
+search required:</p>
+<pre><code>| makeresults | sendalert notable_to_perplexity_json param.test_connectivity=1
+| makeresults | sendalert notable_to_slack_json param.test_connectivity=1</code></pre>
+<p>Then check
+<code>$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log</code>
+and <code>$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log</code>
+respectively (each action now logs to its own file — see Release Notes
+1.4.0) and grep for one of these unambiguous outcome lines:</p>
+<table>
+<thead>
+<tr>
+<th>Log line prefix</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SLACK AUTH OK</code> / <code>PERPLEXITY AUTH OK</code></td>
+<td>Credential is valid and the API accepted it</td>
+</tr>
+<tr>
+<td><code>SLACK AUTH FAILURE</code> /
+<code>PERPLEXITY AUTH FAILURE</code></td>
+<td>Credential is invalid/expired/revoked — this is NOT a
+transient/network error, the API explicitly rejected it (e.g.
+<code>auth.test</code> returned
+<code>ok=false error=invalid_auth</code>, or Perplexity returned HTTP
+401/403)</td>
+</tr>
+<tr>
+<td><code>PERPLEXITY API FAILURE (non-auth)</code></td>
+<td>Perplexity API reachable and credential fine, but the request failed
+for another reason (rate limit, bad model name, etc.)</td>
+</tr>
+<tr>
+<td><code>SLACK AUTH SKIPPED</code> /
+<code>PERPLEXITY AUTH SKIPPED</code></td>
+<td>Nothing configured for that credential (or
+<code>perplexity_enabled=0</code>) — not a failure, just not tested</td>
+</tr>
+</tbody>
+</table>
+<p>Every invocation of either script — with or without
+<code>test_connectivity</code> set, successful or not — also always logs
+an unconditional
+<code>Invoked: sid=... search_name=... test_connectivity=...</code>
+(plus an action-specific flag: <code>perplexity_enabled=...</code> for
+the Perplexity action, <code>delivery_method=...</code> for the Slack
+action) heartbeat line first, so "did the alert action even run" is
+never a question you have to guess at from a missing log entry.</p>
+<p>The same <code>SLACK AUTH FAILURE</code> /
+<code>PERPLEXITY AUTH FAILURE</code> labelling is also used during
+<strong>real</strong> delivery/answering (not just the test mode) — if a
+live Slack send fails because Slack rejects the bot token, or a
+<code>perplexity_ask</code> call gets a 401/403, the log line makes that
+unmistakable rather than burying it in a generic Python traceback.</p>
+<h2 id="gui-readme--setup-pages">GUI: README + Setup pages</h2>
+<p>Since 1.4.0 the app is visible in Splunk Web's app nav
+(<code>is_visible = 1</code>) with two pages:</p>
+<ul>
+<li><strong>README</strong> (default landing page) — renders this file's
+content in-app via <code>appserver/static/readme.html</code>, so anyone
+can read the app's own documentation without leaving Splunk Web or
+finding this repo.</li>
+<li><strong>Setup</strong> — a standard Splunk <code>setup.xml</code>
+page (shown automatically the first time the app is opened, and
+reachable afterwards via <strong>Manage Apps &gt; TA_ResponseActions
+&gt; Set up</strong>) with two blocks for submitting/updating the Slack
+bot token and the Perplexity API key directly into Splunk's
+<code>storage/passwords</code> credential vault, under the realms both
+scripts already expect (<code>slack_notable_action</code> /
+<code>perplexity_notable_action</code>) — no <code>curl</code> required
+for initial setup, though the <code>curl</code> commands below still
+work for scripted/headless deployment or later rotation.</li>
+</ul>
+<h2 id="installation">Installation</h2>
+<ol type="1">
+<li><p>Copy this folder to
+<code>$SPLUNK_HOME/etc/apps/TA_ResponseActions/</code>, restart
+Splunk.</p></li>
+<li><p>Open the app in Splunk Web — the <strong>Setup</strong> page
+appears automatically (or via <strong>Manage Apps &gt;
+TA_ResponseActions &gt; Set up</strong>) — and submit the Slack bot
+token and Perplexity API key there. Alternatively, store them directly
+via <code>curl</code>:</p>
+<pre class="shell"><code>curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
+  -u admin:&lt;pass&gt; -d name=slack_notable_action -d realm=slack_notable_action -d password=xoxb-...
+
+curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
+  -u admin:&lt;pass&gt; -d name=perplexity_notable_action -d realm=perplexity_notable_action \
+  -d password=&lt;perplexity_api_key&gt;</code></pre>
+<p>Get a Perplexity key at <a
+href="https://www.perplexity.ai/settings/api">perplexity.ai/settings/api</a>.</p></li>
+<li><p>In ES, ensure this app is covered by <strong>Configure &gt;
+General &gt; App Import</strong> so ES recognizes it as an Adaptive
+Response provider.</p></li>
+<li><p>On a correlation search, <strong>Add New Response Action</strong>
+and add either or both:</p>
+<ul>
+<li><strong>Send Notable to Perplexity API (Agentic Response)</strong> —
+configure <code>perplexity_enabled</code>,
+<code>perplexity_model</code>, <code>additional_fields</code> (the
+<code>perplexity_ask</code> block), and save.</li>
+<li><strong>Send Notable to Slack (ES Findings)</strong> — configure
+<code>delivery_method</code>, <code>slack_channel</code> (defaults to
+<code>C0BKA6D4AFL</code> / <code>#es-findings</code>),
+<code>additional_fields</code>, and save.</li>
+</ul></li>
+<li><p>Test via Incident Review → Run Adaptive Response Actions on a
+notable, or trigger the correlation search directly. Use
+<code>param.test_connectivity=1</code> on either action first (see
+"Testing connectivity / credentials" above) to confirm credentials are
+valid before relying on a live notable.</p></li>
+</ol>
+<h2 id="files">Files</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default/alert_actions.conf</code></td>
+<td>Registers both actions — <code>[notable_to_perplexity_json]</code>
+(agentic, no Slack params) and <code>[notable_to_slack_json]</code>
+(Slack notification, no Perplexity params) — with their delivery/payload
+parameters and <code>param._cam</code> (adhoc + drilldown)</td>
+</tr>
+<tr>
+<td><code>README/alert_actions.conf.spec</code></td>
+<td>Splunk config spec for both stanzas — drives the auto-generated
+config UI</td>
+</tr>
+<tr>
+<td><code>bin/ta_common.py</code></td>
+<td>Shared code used by both actions — payload building, credential
+vault lookups (Slack + Perplexity), the Perplexity API call, Slack
+delivery helpers, notable comment write-back, KV store write, and both
+<code>check_slack_connectivity()</code>/<code>check_perplexity_connectivity()</code>
+probes. Each caller passes in its own
+<code>log</code>/<code>app_name</code> so log lines land in that
+script's own log file.</td>
+</tr>
+<tr>
+<td><code>bin/notable_to_perplexity_json.py</code></td>
+<td>Agentic response action — answers <code>perplexity_ask</code>
+synchronously via Perplexity, Adaptive Response panel status, notable
+comment write-back, KV store enrichment write. No Slack objects.</td>
+</tr>
+<tr>
+<td><code>bin/notable_to_slack_json.py</code></td>
+<td>Slack notification action — builds the same JSON envelope
+(unanswered) and delivers to Slack, Adaptive Response panel status,
+notable comment write-back, KV store enrichment write. No Perplexity
+objects.</td>
+</tr>
+<tr>
+<td><code>default/collections.conf</code></td>
+<td><code>notable_slack_enrichment</code> KV store collection schema
+(shared by both actions)</td>
+</tr>
+<tr>
+<td><code>default/transforms.conf</code></td>
+<td><code>notable_slack_enrichment_lookup</code> — lookup wrapper for
+reading the collection via SPL</td>
+</tr>
+<tr>
+<td><code>default/data/ui/views/notable_slack_enrichment_drilldown.xml</code></td>
+<td>Dashboard rendering the enrichment record(s) (from either/both
+actions) for a given <code>sid</code>/<code>rid</code></td>
+</tr>
+<tr>
+<td><code>default/data/ui/nav/default.xml</code></td>
+<td>App nav — README page as the default landing view, plus the
+drilldown dashboard and stock Search</td>
+</tr>
+<tr>
+<td><code>default/data/ui/views/readme.xml</code></td>
+<td>Simple XML view embedding
+<code>appserver/static/readme.html</code></td>
+</tr>
+<tr>
+<td><code>appserver/static/readme.html</code></td>
+<td>Static in-app rendering of this README</td>
+</tr>
+<tr>
+<td><code>default/setup.xml</code></td>
+<td>Splunk Setup page — submits the Slack bot token and Perplexity API
+key straight into <code>storage/passwords</code> under the realms both
+scripts expect</td>
+</tr>
+<tr>
+<td><code>metadata/default.meta</code></td>
+<td>Object ACLs</td>
+</tr>
+<tr>
+<td><code>static/appIcon.png</code>, <code>appIconAlt.png</code>,
+<code>appIcon_2x.png</code>, <code>appIconAlt_2x.png</code>,
+<code>appLogo.png</code>, <code>appLogo_2x.png</code></td>
+<td>App-level icon/logo set (App Manager convention), copied from <a
+href="https://github.com/UnshakeableSaltLtd/splunk_build/tree/main/library/unshakeablesalt/org_template/static"><code>splunk_build</code>'s
+<code>org_template</code></a></td>
+</tr>
+<tr>
+<td><code>appserver/static/appIcon.png</code></td>
+<td>Icon referenced by <code>alert_actions.conf</code>'s
+<code>icon_path = appIcon.png</code> for each action's UI icon in
+Incident Review</td>
+</tr>
+</tbody>
+</table>
+<p>Logs:
+<code>$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log</code>
+and <code>$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log</code>
+(separate files since 1.4.0).</p>
+<h2 id="release-notes">Release Notes</h2>
+<h3 id="140">1.4.0</h3>
+<ul>
+<li><strong>Split the single combined action into two independent
+Adaptive Response actions</strong>, so the agentic flow and the
+human-notification flow can be enabled, disabled, or have their
+credentials rotated completely independently:
+<ul>
+<li><strong><code>notable_to_perplexity_json</code></strong> — kept the
+agentic response flow only. Answers <code>perplexity_ask</code>
+synchronously via the Perplexity API and writes the result back to the
+notable (comment + KV store,
+<code>delivery_method="perplexity_api"</code>). <strong>All Slack
+objects, params, and delivery code removed</strong> — this action makes
+zero Slack calls and has no <code>slack_*</code> params. Its
+<code>test_connectivity</code> mode now tests Perplexity only.</li>
+<li><strong><code>notable_to_slack_json</code></strong> (new file,
+replacing the pre-split <code>notable_to_perplexity_json.py</code>'s
+Slack half) — posts the same envelope to Slack, unanswered. This action
+makes zero Perplexity calls and has no <code>perplexity_*</code> params.
+Its <code>test_connectivity</code> mode now tests Slack only. Default
+<code>param.slack_channel</code> set to <code>C0BKA6D4AFL</code>
+(<code>#es-findings</code>).</li>
+</ul></li>
+<li>Extracted all shared logic into a new <code>bin/ta_common.py</code>
+module — payload building, credential vault lookups, the Perplexity API
+call, Slack delivery helpers, notable comment/KV store write-back, and
+both connectivity checks — imported by both scripts so payload shape and
+behavior stay in lockstep. Every function that logs now takes the
+caller's <code>log</code> object explicitly, so each action writes to
+its own log file (<code>notable_to_perplexity_json.log</code> /
+<code>notable_to_slack_json.log</code>) instead of sharing one.</li>
+<li><code>default/alert_actions.conf</code> and
+<code>README/alert_actions.conf.spec</code> split into two stanzas —
+<code>[notable_to_perplexity_json]</code> (no <code>slack_*</code>
+params) and <code>[notable_to_slack_json]</code> (no
+<code>perplexity_*</code> params) — each documenting only the params
+relevant to that action.</li>
+<li><strong>App is now visible in Splunk Web</strong>
+(<code>is_visible = 0</code> → <code>1</code>) with a new GUI:
+<ul>
+<li><code>default/data/ui/nav/default.xml</code> — a README page as the
+default landing view, the existing drilldown dashboard, and stock
+Search.</li>
+<li><code>default/data/ui/views/readme.xml</code> +
+<code>appserver/static/readme.html</code> — renders this README
+in-app.</li>
+<li><code>default/setup.xml</code> — a Setup page for
+submitting/updating the Slack bot token and Perplexity API key directly
+into <code>storage/passwords</code>, shown automatically on first open
+and reachable afterward via <strong>Manage Apps &gt; Set
+up</strong>.</li>
+</ul></li>
+<li>Version bumped <strong>1.3.4 → 1.4.0</strong> (minor bump,
+explicitly requested — this is a breaking change to the alert action's
+shape, not a patch).</li>
+</ul>
+<h3 id="134">1.3.4</h3>
+<ul>
+<li>Added <code>param.test_connectivity</code> — a side-effect-free
+credential check mode (see "Testing connectivity / credentials" above).
+Skips all real processing and just probes Slack (<code>auth.test</code>)
+and Perplexity (a minimal 1-token completion), logging unambiguous
+<code>SLACK/PERPLEXITY AUTH OK</code> / <code>AUTH FAILURE</code> /
+<code>AUTH SKIPPED</code> lines. Invoke via
+<code>| makeresults | sendalert notable_to_perplexity_json param.test_connectivity=1</code>.</li>
+<li>Added <code>SlackApiError</code> and <code>PerplexityApiError</code>
+exception classes (each with an <code>is_auth_error</code> flag) so a
+bad/expired/revoked credential is now always distinguishable in the log
+from a generic network/timeout/parse error, both in the new test mode
+and during normal delivery.</li>
+<li>Added <code>resolve_slack_bot_token()</code> /
+<code>resolve_perplexity_api_key()</code> helpers that centralize the
+vault-vs-plaintext credential lookup (previously duplicated inline in
+<code>main()</code>) and report a clear "source" string
+(<code>vault realm=...</code> / <code>plaintext</code> /
+<code>not configured</code>) in every related log line.</li>
+<li><code>get_perplexity_response()</code> now logs a distinct
+<code>PERPLEXITY AUTH FAILURE</code> line for HTTP 401/403 versus
+<code>PERPLEXITY API FAILURE</code> for other errors (rate limits,
+network issues, response parsing failures), instead of one generic
+<code>log.exception(...)</code> for every case.</li>
+<li>Every invocation now logs an unconditional
+<code>Invoked: sid=... search_name=... test_connectivity=... perplexity_enabled=... delivery_method=...</code>
+heartbeat line immediately after parsing configuration, regardless of
+outcome.</li>
+<li>The real Slack delivery failure path now detects
+<code>SlackApiError</code> and logs a distinct
+<code>SLACK AUTH FAILURE</code> line (with the failing method + Slack
+error code) when the token itself is the problem, in addition to the
+existing generic failure logging for non-auth errors.</li>
+</ul>
+<h3 id="133">1.3.3</h3>
+<ul>
+<li><strong>Replaced the Slack → HEC bridge
+(<code>bin/slack_hec_bridge.py</code>, 1.3.1–1.3.2) with a synchronous
+Perplexity API call made in-line inside
+<code>bin/notable_to_perplexity_json.py</code>.</strong> The bridge
+script, its <code>inputs.conf</code>/<code>inputs.conf.spec</code>
+registration, and the KV store/collections/transforms/ drilldown fields
+it added (<code>slack_thread_ts</code>,
+<code>awaiting_ai_response</code>, <code>risk_object</code>,
+<code>risk_object_type</code>, <code>risk_score</code>,
+<code>risk_message</code>, <code>hec_sent</code>,
+<code>notable_enriched_at</code>) have all been removed from this app
+and archived as a documented lesson at <a
+href="../SEC1215/lessons/README.md"><code>../SEC1215/lessons/</code></a>.</li>
+<li>Added <code>param.perplexity_enabled</code>,
+<code>param.perplexity_api_key_realm</code>,
+<code>param.perplexity_api_key</code>, and
+<code>param.perplexity_model</code> to <code>alert_actions.conf</code>.
+When enabled, <code>bin/notable_to_perplexity_json.py</code> answers the
+standing <code>perplexity_ask</code> block via the Perplexity API before
+delivery and merges the result into
+<code>additional_fields.perplexity_response</code> — see "Perplexity
+API: synchronous ask/response" above.</li>
+<li>Removed the <code>reply_format</code> key from the default
+<code>perplexity_ask</code> block in
+<code>param.additional_fields</code> (no longer needed — the synchronous
+call uses a proper JSON Schema <code>response_format</code> instead of
+instructing the model to reply with raw JSON text in Slack).</li>
+<li>Slack delivery itself is unchanged — still useful for visually
+auditing what was asked and answered.</li>
+</ul>
+<h3 id="132">1.3.2</h3>
+<ul>
+<li>Fixed <code>README/alert_actions.conf.spec</code> for
+<code>[notable_to_perplexity_json]</code>: added the missing
+<code>param._cam</code> documentation line. Splunk's own dev docs say
+<code>param._cam</code> is inherited from <code>Splunk_SA_CIM</code>'s
+spec and doesn't need redeclaring, but any tooling that only resolves
+specs on a per-app basis (rather than merging in other installed apps'
+specs) will otherwise flag it.</li>
+<li>Added app icon/logo assets (<code>static/appIcon.png</code>,
+<code>appIconAlt.png</code>, <code>appIcon_2x.png</code>,
+<code>appIconAlt_2x.png</code>, <code>appLogo.png</code>,
+<code>appLogo_2x.png</code>) plus
+<code>appserver/static/appIcon.png</code>, reused from <a
+href="https://github.com/UnshakeableSaltLtd/splunk_build/tree/main/library/unshakeablesalt/org_template/static"><code>splunk_build</code>'s
+<code>org_template</code></a>. This satisfies
+<code>alert_actions.conf</code>'s <code>icon_path = appIcon.png</code>
+setting, which per Splunk's own spec "refers to the
+<code>appserver/static</code> directory in the app that the alert action
+is defined in."</li>
+<li><strong>Note on the VS Code Splunk extension linter:</strong> the
+official <a
+href="https://github.com/splunk/vscode-extension-splunk">Visual Studio
+Code Extension for Splunk</a> only validates <code>.conf</code> files
+against its own bundled global spec files (or a single folder set via
+the <code>splunk.spec.FilePath</code> setting) — it never reads an app's
+own <code>README/*.conf.spec</code> file (confirmed in
+<code>extension.js</code>'s <code>getSpecFilePath()</code>, and tracked
+as a known gap for <code>inputs.conf</code> in <a
+href="https://github.com/splunk/vscode-extension-splunk/issues/59">issue
+#59</a>, which applies to every conf type). That means every custom
+<code>param.*</code> key on a custom alert action — including
+<code>param._cam</code> — will always show as "Invalid key in stanza" in
+that extension, regardless of what's declared in this app's spec file.
+This is a known limitation of the extension, not a defect in this app;
+these specific warnings are safe to ignore. (Community reports of the
+same <code>param._cam</code> warning, e.g. <a
+href="https://community.splunk.com/t5/All-Apps-and-Add-ons/Splunk-Add-on-Builder-How-to-resolve-quot-Invalid-key-in-stanza/m-p/215990">Splunk
+Add-on Builder thread</a> and <a
+href="https://community.splunk.com/t5/Splunk-On-Call/Invalid-key-in-stanza/m-p/477090">VictorOps
+app thread</a>, confirm the same root cause.)</li>
+</ul>
+<h3 id="131">1.3.1</h3>
+<ul>
+<li>Added <code>bin/slack_hec_bridge.py</code>, a classic scripted input
+(<code>default/inputs.conf</code>, <code>README/inputs.conf.spec</code>)
+that closes the Phase 2/3 agentic loop: polls the KV store for
+<code>awaiting_ai_response=1</code> records, reads the AI's reply from
+the Slack thread, parses it against the strict JSON schema, POSTs a CIM
+Risk event to HEC (<code>index=risk</code> by default), and writes the
+verdict back to the originating notable's comment trail. See <a
+href="../SEC1215/ARCHITECTURE.md">../SEC1215/ARCHITECTURE.md</a> for the
+full narrative.</li>
+<li><code>alert_actions.conf</code>'s default
+<code>perplexity_ask.additional_fields</code> block now also ships a
+<code>reply_format</code> key that pins the AI to a fixed JSON reply
+shape
+(<code>risk_score</code>/<code>risk_object</code>/<code>risk_object_type</code>/<code>risk_message</code>),
+so <code>slack_hec_bridge.py</code> can parse it deterministically
+instead of scraping free-text prose.</li>
+<li><code>bin/notable_to_perplexity_json.py</code> now resolves the
+Slack channel + message <code>ts</code> of the uploaded file via
+<code>files.info</code> (file_upload delivery only) and stores it as
+<code>slack_thread_ts</code> on the KV store record, with
+<code>awaiting_ai_response=1</code>, so the bridge knows which thread to
+poll.</li>
+<li><code>default/collections.conf</code>/<code>transforms.conf</code>
+extended with <code>slack_thread_ts</code>,
+<code>awaiting_ai_response</code>, <code>risk_object</code>,
+<code>risk_object_type</code>, <code>risk_score</code>,
+<code>risk_message</code>, <code>hec_sent</code>,
+<code>notable_enriched_at</code>; the drilldown dashboard gained a new
+"Agentic AI verdict" panel showing them.</li>
+<li><strong>Known limitation:</strong> the bridge only works for
+<code>delivery_method=file_upload</code> — webhook delivery has no bot
+token/<code>conversations.read</code> scope to read a reply back
+with.</li>
+</ul>
+<h3 id="130">1.3.0</h3>
+<ul>
+<li><code>param.additional_fields</code> now ships a default
+<code>perplexity_ask</code> block with three standing checks run against
+every notable by the Slack-&gt;HEC bridge automation: is
+<code>$result.repo$</code> a repo we commonly see for this kind of
+finding, is <code>$result.user$</code> an expected/authorized user, and
+is <code>$result.src$</code> a low-threat source IP. Override or extend
+per correlation search as needed.</li>
+<li>Slack <code>initial_comment</code>/webhook summary text (both
+delivery methods) now reads <code>Notable - &lt;search_name&gt;</code> /
+<code>Event time: &lt;event time&gt;</code> ahead of the JSON payload,
+instead of the old <code>:rotating_light:</code>/SID-only line. Event
+time is read from the notable's own <code>_time</code> field where
+available, falling back to the send timestamp.</li>
+</ul>
+<h3 id="120">1.2.0</h3>
+<ul>
+<li>Added <code>param.write_back_kvstore</code> — persists a structured
+enrichment record (event_id, delivery method, Slack channel,
+<code>additional_fields</code> JSON, status/error) to a new
+<code>notable_slack_enrichment</code> KV store collection, keyed by the
+AR invocation's <code>sid</code>/<code>rid</code>.</li>
+<li>Added <code>param._cam</code> to <code>alert_actions.conf</code>:
+<code>supports_adhoc: true</code> (makes the action available under
+Incident Review's "Run Adaptive Response Actions" ad hoc menu) and a
+<code>drilldown_uri</code> pointing at a new custom dashboard.</li>
+<li>Added <code>default/collections.conf</code>,
+<code>default/transforms.conf</code>, and
+<code>default/data/ui/views/notable_slack_enrichment_drilldown.xml</code>
+for the KV store lookup + view.</li>
+<li>Fixed a repo-level <code>.gitignore</code> bug (a leftover
+PyInstaller <code>*.spec</code> rule) that was silently excluding
+Splunk's <code>.conf.spec</code> convention files from commits.</li>
+</ul>
+<h3 id="110">1.1.0</h3>
+<ul>
+<li>Added native Incident Review "Adaptive Responses" panel reporting
+via <code>cim_actions.ModularAction.message()</code>.</li>
+<li>Added <code>param.write_back_comment</code> — posts a comment back
+to the triggering notable via <code>/services/notable_update</code> so
+the collected Slack data appears in that notable's own Activity timeline
+for analysts.</li>
+</ul>
+<h3 id="100">1.0.0</h3>
+<ul>
+<li>Initial release: full-JSON notable delivery to Slack via bot token
+(file_upload) or webhook, configurable additional fields, credential
+vault support, field denylist.</li>
+</ul>
+</body>
+</html>
