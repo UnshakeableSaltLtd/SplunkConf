@@ -29,23 +29,6 @@
   </row>
   <row>
     <panel>
-      <title>Agentic AI verdict (Phase 2/3 - bin/slack_hec_bridge.py)</title>
-      <description>awaiting_ai_response=1 means the bridge is still polling the Slack thread for a reply. hec_sent=1 / notable_enriched_at populated means the verdict was written to index=risk and back to this notable as a comment.</description>
-      <table>
-        <search>
-          <query>| inputlookup notable_slack_enrichment_lookup where sid="$sid$" AND rid="$rid$"
-| table slack_thread_ts awaiting_ai_response risk_object risk_object_type risk_score risk_message hec_sent notable_enriched_at
-| sort - notable_enriched_at</query>
-          <earliest>0</earliest>
-          <latest></latest>
-        </search>
-        <option name="drilldown">none</option>
-        <option name="wrap">true</option>
-      </table>
-    </panel>
-  </row>
-  <row>
-    <panel>
       <title>Raw additional_fields JSON (most recent record)</title>
       <table>
         <search>

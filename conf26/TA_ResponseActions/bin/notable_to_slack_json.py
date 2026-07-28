@@ -8,13 +8,33 @@ Sends the triggering Notable/Finding to Slack as a *complete* JSON
 payload (all CIM/risk/notable fields), merged with any user-defined
 additional fields configured on the action.
 
+If a "perplexity_ask" object is present in additional_fields (see the
+default param.additional_fields template), this action ALSO calls the
+Perplexity API synchronously, right here, before delivery: each ask
+question is answered and the resulting "perplexity_response" object
+(same keys, plus "overall") is merged into additional_fields alongside
+the ask - so the SAME Slack post used for visual audit already shows
+both the question and the answer, and the write-back paths below carry
+it straight into Splunk. An earlier iteration of this integration used
+a separate scripted input (bin/slack_hec_bridge.py) that polled this
+action's KV store output, read the AI's reply back out of the Slack
+thread, and posted a CIM Risk event to HEC - see
+conf26/SEC1215/lessons/ for that retired design, kept only as a
+historical/lessons-learned reference; it added real operational
+overhead (polling interval, thread-ts plumbing, reply-format drift)
+to answer questions this action already has all the context for at
+send time.
+
 After delivery, the action also writes back to the SAME notable so
 analysts see the result alongside the rest of the event in Incident
 Review:
   1. cim_actions.ModularAction.message() -> native "Adaptive Responses"
      panel / "View Adaptive Response Invocations" audit trail.
   2. /services/notable_update comment -> a permanent entry in that
-     notable's own Activity/comment timeline (the collected Slack data).
+     notable's own Activity/comment timeline (the collected Slack data,
+     now including perplexity_response when applicable).
+  3. notable_slack_enrichment KV store record -> structured fields
+     (same additional_fields JSON) surfaced via a custom drilldown.
 
 Install at:
   $SPLUNK_HOME/etc/apps/TA_ResponseActions/bin/notable_to_slack_json.py
@@ -41,6 +61,8 @@ import urllib.request
 
 APP_NAME = "notable_to_slack_json"
 TOKEN_RE = re.compile(r"\$(result|job)\.([A-Za-z0-9_.]+)\$")
+THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 
 # ----------------------------------------------------------------------
 # Optional: Splunk_SA_CIM's ModularAction gives us the native Incident
@@ -147,7 +169,8 @@ def build_payload(row, job, cfg):
 
 
 # ----------------------------------------------------------------------
-# Slack credential vault lookup (recommended over plaintext token param)
+# Credential vault lookup (recommended over plaintext token params) -
+# shared by the Slack bot token and the Perplexity API key below.
 # ----------------------------------------------------------------------
 def get_secret_from_vault(server_uri, session_key, realm, app):
     """Fetch a clear-text password from Splunk's storage/passwords vault by realm.
@@ -168,6 +191,93 @@ def get_secret_from_vault(server_uri, session_key, realm, app):
         if content.get("realm") == realm:
             return content.get("clear_password")
     return None
+
+
+# ----------------------------------------------------------------------
+# Perplexity API: answer this notable's "perplexity_ask" questions
+# synchronously, right here in the alert action, so the answer travels
+# with the SAME Slack post (for visual audit) and the SAME write-back-
+# to-notable paths (comment + KV store) below - no separate polling
+# agent or HEC index required. See module docstring for background.
+# https://docs.perplexity.ai/docs/agent-api/output-control (structured outputs)
+# ----------------------------------------------------------------------
+def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, session_key, app):
+    if not isinstance(perplexity_ask, dict) or not perplexity_ask:
+        return None
+
+    api_key = (cfg.get("perplexity_api_key") or "").strip()
+    realm = (cfg.get("perplexity_api_key_realm") or "").strip()
+    if not api_key and realm:
+        try:
+            api_key = get_secret_from_vault(server_uri, session_key, realm, app) or ""
+        except Exception:
+            log.exception("Failed to fetch Perplexity API key from vault realm=%s", realm)
+    if not api_key:
+        log.info("No Perplexity API key configured (key or key_realm); skipping perplexity_response")
+        return None
+
+    model = (cfg.get("perplexity_model") or "sonar").strip()
+    ask_keys = list(perplexity_ask.keys())
+
+    schema = {
+        "type": "object",
+        "properties": {k: {"type": "string"} for k in ask_keys},
+        "required": list(ask_keys),
+        "additionalProperties": False,
+    }
+    schema["properties"]["overall"] = {"type": "string"}
+    schema["required"].append("overall")
+
+    system_prompt = (
+        "You are a SOC triage assistant reviewing a single Splunk Enterprise Security notable. "
+        "For each question below, give a concise 1-3 sentence answer grounded in the provided "
+        "context and, where useful, current public information (e.g. known malicious IP ranges, "
+        "well-known Tor exit nodes, common repository/service reputations). Then add one 'overall' "
+        "field with a short risk read-out synthesizing all the answers - call out anything atypical "
+        "or worth a human follow-up. Answer strictly as JSON matching the given schema."
+    )
+    user_prompt = (
+        f"Notable context (already extracted from the finding):\n{json.dumps(context_fields, default=str)}\n\n"
+        f"Questions to answer:\n{json.dumps(perplexity_ask, default=str)}"
+    )
+
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "perplexity_response", "schema": schema},
+            },
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        PERPLEXITY_API_URL,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        content = result["choices"][0]["message"]["content"]
+        # sonar-reasoning* models prepend a <think>...</think> block even
+        # with response_format set; strip it before parsing, just in case
+        # this TA is ever pointed at one of those models.
+        content = THINK_TAG_RE.sub("", content).strip()
+        answer = json.loads(content)
+        log.info("Got perplexity_response for keys=%s via model=%s", ask_keys, model)
+        return answer
+    except Exception:
+        log.exception("Perplexity API call failed for ask_keys=%s model=%s", ask_keys, model)
+        return None
 
 
 # ----------------------------------------------------------------------
@@ -254,40 +364,6 @@ def slack_api_post(url, token, data=None, json_body=None):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def slack_api_get(url, token, params):
-    headers = {"Authorization": f"Bearer {token}"}
-    full_url = f"{url}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(full_url, headers=headers, method="GET")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
-# ----------------------------------------------------------------------
-# Resolve the channel/ts of the message this file was shared into, so
-# bin/slack_hec_bridge.py (Phase 2/3 - see ../SEC1215/ARCHITECTURE.md) knows
-# which Slack thread to poll with conversations.replies for the agentic AI's
-# verdict. Only meaningful for file_upload delivery: webhook delivery has no
-# bot token and no conversations.read scope, so there is nothing to read a
-# reply back with - see README.md's "Known limitation" note.
-# https://api.slack.com/methods/files.info
-# ----------------------------------------------------------------------
-def get_file_share_ts(token, file_id, channel):
-    try:
-        resp = slack_api_get("https://slack.com/api/files.info", token, {"file": file_id})
-    except Exception:
-        log.exception("files.info lookup failed for file_id=%s; bridge won't be able to poll this notable", file_id)
-        return None
-    if not resp.get("ok"):
-        log.warning("files.info returned not-ok for file_id=%s: %s", file_id, resp)
-        return None
-    shares = (resp.get("file") or {}).get("shares") or {}
-    for visibility in ("public", "private"):
-        entries = (shares.get(visibility) or {}).get(channel)
-        if entries:
-            return entries[0].get("ts")
-    return None
-
-
 def upload_json_to_slack(token, channel, filename, json_bytes, comment):
     # Step 1: request an upload URL (files.upload is retired as of 2025-11-12)
     step1 = slack_api_post(
@@ -319,7 +395,7 @@ def upload_json_to_slack(token, channel, filename, json_bytes, comment):
     )
     if not step3.get("ok"):
         raise RuntimeError(f"files.completeUploadExternal failed: {step3}")
-    return step3, file_id
+    return step3
 
 
 # ----------------------------------------------------------------------
@@ -395,6 +471,7 @@ def main():
     cfg = payload.get("configuration", {}) or {}
     write_back_comment = (cfg.get("write_back_comment", "1")) in ("1", "true", "True")
     write_back_kvstore = (cfg.get("write_back_kvstore", "1")) in ("1", "true", "True")
+    perplexity_enabled = (cfg.get("perplexity_enabled", "1")) in ("1", "true", "True")
     kvstore_app = payload.get("app", "TA_ResponseActions") or "TA_ResponseActions"
     job = {
         "search_name": payload.get("search_name"),
@@ -432,6 +509,28 @@ def main():
     failures = 0
     for i, row in enumerate(rows[:max_events]):
         envelope = build_payload(row, job, cfg)
+
+        # If this notable carries a "perplexity_ask" object (see the default
+        # param.additional_fields template), answer it synchronously via the
+        # Perplexity API and merge the result in as "perplexity_response" -
+        # right next to the ask, in the SAME envelope that gets posted to
+        # Slack and written back to the notable below.
+        ask = (envelope.get("additional_fields") or {}).get("perplexity_ask")
+        if perplexity_enabled and ask:
+            try:
+                response = get_perplexity_response(
+                    ask,
+                    envelope.get("notable", {}),
+                    cfg,
+                    payload.get("server_uri"),
+                    payload.get("session_key"),
+                    payload.get("app", "search"),
+                )
+                if response is not None:
+                    envelope["additional_fields"]["perplexity_response"] = response
+            except Exception:
+                log.exception("Unexpected error answering perplexity_ask for row=%d", i)
+
         json_bytes = json.dumps(envelope, indent=2 if pretty else None, default=str).encode("utf-8")
 
         # update() sets rid/orig_sid/orig_rid so message() correlates the
@@ -448,13 +547,7 @@ def main():
             except Exception:
                 log.exception("modaction.update() failed for row=%d", i)
 
-        # Populated below for file_upload deliveries only - webhook has no bot
-        # token / conversations.read scope, so slack_hec_bridge.py (Phase 2/3)
-        # has nothing to poll and awaiting_ai_response stays 0. See the
-        # "Known limitation" note in README.md.
         slack_permalink = ""
-        slack_thread_ts = ""
-        awaiting_ai_response = 0
 
         try:
             if delivery == "webhook":
@@ -474,20 +567,10 @@ def main():
                     f"Notable - {job.get('search_name')}\n"
                     f"Event time: {format_event_time(row, envelope)}"
                 )
-                upload_resp, file_id = upload_json_to_slack(token, channel, filename, json_bytes, comment)
+                upload_resp = upload_json_to_slack(token, channel, filename, json_bytes, comment)
                 uploaded_files = upload_resp.get("files") or []
                 if uploaded_files:
                     slack_permalink = uploaded_files[0].get("permalink", "") or ""
-                thread_ts = get_file_share_ts(token, file_id, channel)
-                if thread_ts:
-                    slack_thread_ts = thread_ts
-                    awaiting_ai_response = 1
-                else:
-                    log.warning(
-                        "Could not resolve Slack thread ts for sid=%s row=%d; "
-                        "slack_hec_bridge.py will not be able to poll this notable for a reply",
-                        job.get("sid"), i,
-                    )
             log.info("Delivered notable sid=%s row=%d to Slack via %s", job.get("sid"), i, delivery)
 
             # 1) Native Adaptive Response panel status for this notable.
@@ -502,8 +585,9 @@ def main():
                     log.exception("modaction.message() (success) failed for row=%d", i)
 
             # 2) Persisted comment on the SAME notable's own Activity trail,
-            #    so the collected/sent data is visible with the rest of the
-            #    notable in the analyst's Incident Review queue.
+            #    so the collected/sent data (now including perplexity_response
+            #    when applicable) is visible with the rest of the notable in
+            #    the analyst's Incident Review queue.
             if write_back_comment:
                 event_id = row.get("event_id")
                 if event_id:
@@ -529,7 +613,8 @@ def main():
 
             # 3) Structured enrichment record in the KV store, keyed by
             #    sid/rid so it can be reached via the drilldown_uri custom
-            #    view - gives analysts real fields, not just comment text.
+            #    view - gives analysts real fields (including
+            #    perplexity_response, when applicable), not just comment text.
             if write_back_kvstore:
                 try:
                     write_kvstore_record(
@@ -546,19 +631,11 @@ def main():
                             "delivery_method": delivery,
                             "slack_channel": cfg.get("slack_channel") or "",
                             "slack_permalink": slack_permalink,
-                            "slack_thread_ts": slack_thread_ts,
-                            "awaiting_ai_response": awaiting_ai_response,
                             "additional_fields": json.dumps(
                                 envelope.get("additional_fields"), default=str
                             ),
                             "status": "success",
                             "error": "",
-                            "risk_object": "",
-                            "risk_object_type": "",
-                            "risk_score": "",
-                            "risk_message": "",
-                            "hec_sent": 0,
-                            "notable_enriched_at": "",
                         },
                     )
                 except Exception:
@@ -593,19 +670,11 @@ def main():
                             "delivery_method": delivery,
                             "slack_channel": cfg.get("slack_channel") or "",
                             "slack_permalink": slack_permalink,
-                            "slack_thread_ts": slack_thread_ts,
-                            "awaiting_ai_response": awaiting_ai_response,
                             "additional_fields": json.dumps(
                                 envelope.get("additional_fields"), default=str
                             ),
                             "status": "failure",
                             "error": str(sys.exc_info()[1]),
-                            "risk_object": "",
-                            "risk_object_type": "",
-                            "risk_score": "",
-                            "risk_message": "",
-                            "hec_sent": 0,
-                            "notable_enriched_at": "",
                         },
                     )
                 except Exception:

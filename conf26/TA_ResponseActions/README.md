@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Slack (Full JSON)
-**Version:** 1.3.2
+**Version:** 1.3.3
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -23,41 +23,40 @@ Two delivery modes:
 
 - Splunk Enterprise Security 7.x+ on Splunk Enterprise 9.x/10.x
 - Python 3.x (bundled with Splunk)
-- A Slack app with a bot token scoped `files:write`, `chat:write`, and `conversations.replies`/
-  `channels:history` (the last two are needed by `bin/slack_hec_bridge.py`, see below, to read the
-  agentic AI's reply out of the thread — file_upload delivery only, see "Known limitation")
-- A Splunk HEC token with write scope to the CIM Risk index (`index=risk` by default)
+- A Slack app with a bot token scoped `files:write`, `chat:write`
+- A [Perplexity API key](https://www.perplexity.ai/settings/api) (used for the synchronous
+  `perplexity_ask`/`perplexity_response` call — see below)
 - `Splunk_SA_CIM` (Common Information Model Add-on) — ships by default with every ES install.
   Required for the native Adaptive Response panel status reporting below (the action degrades
   gracefully and still delivers to Slack if it's missing)
 
-## Phase 2/3: closing the agentic loop (`bin/slack_hec_bridge.py`)
+## Perplexity API: synchronous ask/response
 
-As of 1.3.1, a second component — `bin/slack_hec_bridge.py`, registered as a classic scripted
-input in `default/inputs.conf` — completes the three-phase agentic loop described in
-[../SEC1215/ARCHITECTURE.md](../SEC1215/ARCHITECTURE.md):
+`param.additional_fields` ships a standing `perplexity_ask` block with three checks run against
+every notable: is `$result.repo$` a repo commonly seen for this kind of finding, is
+`$result.user$` an expected/authorized user, and is `$result.src$` a low-threat source IP.
 
-1. **Phase 1** (this action, above) sends the notable to Slack and asks the agentic AI
-   (`@perplexity_ask`) a question with a strict JSON `reply_format` pinned in
-   `alert_actions.conf`, then records `slack_thread_ts`/`awaiting_ai_response=1` in the
-   `notable_slack_enrichment` KV store record — **file_upload delivery only** (see "Known
-   limitation" below).
-2. **Phase 2** — every 60 seconds, `slack_hec_bridge.py` polls the KV store for
-   `awaiting_ai_response=1` records, reads the Slack thread for the AI's reply, parses it against
-   that same JSON schema, and maps it onto the CIM Risk data model's minimum fields
-   (`risk_object`, `risk_object_type`, `risk_score`, `risk_message`). It then POSTs that as an HEC
-   event into `index=risk` (configurable via `risk_index` in `inputs.conf`) — this is what makes
-   the verdict CIM-compliant and re-injectable into ES's own Risk Analysis framework.
-3. **Phase 3** — the bridge writes the same verdict back to the *originating* notable via
-   `/services/notable_update` (comment only — that API can't accept new fields) and updates the KV
-   store record (`hec_sent`, `notable_enriched_at`), so an analyst opening either the notable or the
-   drilldown dashboard sees the verdict without anyone having copied it there by hand.
+When `param.perplexity_enabled` is on (default), `bin/notable_to_slack_json.py` answers that
+block **in-line, synchronously, before delivery** — a single call to the
+[Perplexity Chat Completions API](https://docs.perplexity.ai/) with a JSON schema
+`response_format` built from the ask keys plus an `overall` risk read-out. The result is merged
+back into the same `additional_fields` object as `perplexity_response`, so it travels through the
+exact same paths that already existed:
 
-**Known limitation:** only notables delivered via `delivery_method=file_upload` can be bridged.
-Webhook delivery has no bot token and no `conversations.read` scope, so there's no way to read a
-reply back — a correlation search wired to webhook delivery will silently never get Phase 2/3
-enrichment. See Takeaway 3's pitfalls in `../SEC1215/ARCHITECTURE.md` for this and other trade-offs
-(reply-format drift, and choosing a classic scripted input over a full modular input scheme).
+1. **The same Slack post** (unchanged — still useful for visually auditing exactly what was asked
+   and answered).
+2. **The same notable comment write-back** (`param.write_back_comment`).
+3. **The same KV store enrichment record** (`param.write_back_kvstore`), so the drilldown
+   dashboard shows the ask and the answer side by side.
+
+No separate index, credential realm, polling interval, or scripted input is required — the alert
+action already has full notable context at send time, so there's nothing to hand off. An earlier
+design (`bin/slack_hec_bridge.py`, shipped in 1.3.1–1.3.2) polled Slack asynchronously for a
+reply and mapped it onto CIM Risk fields via HEC; it worked, but added a second moving part
+(polling interval, thread-ts plumbing, a fixed reply-format contract) to answer questions this
+action already had the answer to. It's kept only as a documented "before" lesson — see
+[`../SEC1215/lessons/README.md`](../SEC1215/lessons/README.md) for the full write-up of why it
+was retired.
 
 ## Closing the loop: getting the result back to the analyst
 
@@ -120,17 +119,15 @@ that invokes the action (correlation search owner, or an analyst running it ad h
    `$job.<field>$` tokens), and save.
 5. Test via Incident Review → Run Adaptive Response Actions on a notable, or trigger the
    correlation search directly.
-6. **(New in 1.3.1)** Store the HEC token in the vault under a *new* realm, `hec_risk_bridge`
-   (same pattern as step 2, different realm name):
+6. **(New in 1.3.3)** Store the Perplexity API key in the vault under realm
+   `perplexity_notable_action` (same pattern as step 2, different realm name):
    ```
    curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
-     -u admin:<pass> -d name=hec_risk_bridge -d realm=hec_risk_bridge -d password=<hec_token>
+     -u admin:<pass> -d name=perplexity_notable_action -d realm=perplexity_notable_action \
+     -d password=<perplexity_api_key>
    ```
-   Confirm that token has write scope to your risk index (default `risk`) before proceeding.
-7. **(New in 1.3.1)** Set `hec_url` in `local/inputs.conf` (copy the `[script://./bin/slack_hec_bridge.py]`
-   stanza from `default/inputs.conf` and override `hec_url`, and `risk_index` if not using the
-   default `risk` index). Restart Splunk, or wait up to 60s, and confirm
-   `$SPLUNK_HOME/var/log/splunk/slack_hec_bridge.log` shows polling activity with no errors.
+   Get a key at [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api). Alternatively
+   set `param.perplexity_api_key` directly on the action (plaintext fallback).
 
 ## Files
 
@@ -141,17 +138,34 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 | `bin/notable_to_slack_json.py` | Action logic — build payload, vault lookup, Slack delivery, Adaptive Response panel status, notable comment write-back, KV store enrichment write |
 | `default/collections.conf` | `notable_slack_enrichment` KV store collection schema |
 | `default/transforms.conf` | `notable_slack_enrichment_lookup` — lookup wrapper for reading the collection via SPL |
-| `default/data/ui/views/notable_slack_enrichment_drilldown.xml` | Dashboard rendering the enrichment record for a given `sid`/`rid`, including the Phase 2/3 verdict columns |
-| `bin/slack_hec_bridge.py` | Phase 2/3 bridge — polls the KV store, reads the AI's Slack reply, writes a CIM Risk HEC event, enriches the originating notable |
-| `default/inputs.conf` | Registers `slack_hec_bridge.py` as a classic scripted input; custom keys are self-parsed, not delivered by splunkd |
-| `README/inputs.conf.spec` | Documentation-only spec for the `inputs.conf` custom keys |
+| `default/data/ui/views/notable_slack_enrichment_drilldown.xml` | Dashboard rendering the enrichment record (including `perplexity_response`) for a given `sid`/`rid` |
 | `metadata/default.meta` | Object ACLs |
 | `static/appIcon.png`, `appIconAlt.png`, `appIcon_2x.png`, `appIconAlt_2x.png`, `appLogo.png`, `appLogo_2x.png` | App-level icon/logo set (App Manager convention), copied from [`splunk_build`'s `org_template`](https://github.com/UnshakeableSaltLtd/splunk_build/tree/main/library/unshakeablesalt/org_template/static) |
 | `appserver/static/appIcon.png` | Icon referenced by `alert_actions.conf`'s `icon_path = appIcon.png` for the action's UI icon in Incident Review |
 
-Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` and `$SPLUNK_HOME/var/log/splunk/slack_hec_bridge.log`
+Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log`
 
 ## Release Notes
+
+### 1.3.3
+
+- **Replaced the Slack → HEC bridge (`bin/slack_hec_bridge.py`, 1.3.1–1.3.2) with a synchronous
+  Perplexity API call made in-line inside `bin/notable_to_slack_json.py`.** The bridge script,
+  its `inputs.conf`/`inputs.conf.spec` registration, and the KV store/collections/transforms/
+  drilldown fields it added (`slack_thread_ts`, `awaiting_ai_response`, `risk_object`,
+  `risk_object_type`, `risk_score`, `risk_message`, `hec_sent`, `notable_enriched_at`) have all
+  been removed from this app and archived as a documented lesson at
+  [`../SEC1215/lessons/`](../SEC1215/lessons/README.md).
+- Added `param.perplexity_enabled`, `param.perplexity_api_key_realm`, `param.perplexity_api_key`,
+  and `param.perplexity_model` to `alert_actions.conf`. When enabled,
+  `bin/notable_to_slack_json.py` answers the standing `perplexity_ask` block via the Perplexity
+  API before delivery and merges the result into `additional_fields.perplexity_response` — see
+  "Perplexity API: synchronous ask/response" above.
+- Removed the `reply_format` key from the default `perplexity_ask` block in
+  `param.additional_fields` (no longer needed — the synchronous call uses a proper JSON Schema
+  `response_format` instead of instructing the model to reply with raw JSON text in Slack).
+- Slack delivery itself is unchanged — still useful for visually auditing what was asked and
+  answered.
 
 ### 1.3.2
 

@@ -47,3 +47,16 @@ param.write_back_kvstore = <bool> Whether to persist a structured record (event_
   collection, keyed by this invocation's sid/rid. Surfaced to analysts via the drilldown_uri
   configured in param._cam - use this when you need real structured fields next to the notable,
   not just comment text. Default: 1
+
+param.perplexity_enabled = <bool> Whether to answer the "perplexity_ask" block in
+  param.additional_fields synchronously via the Perplexity API before delivery, merging the
+  result into additional_fields.perplexity_response. Default: 1
+
+param.perplexity_api_key_realm = <string> Name of the credential realm in Splunk's
+  storage/passwords vault that holds the Perplexity API key. Recommended over plaintext.
+
+param.perplexity_api_key = <string> Plaintext fallback for the Perplexity API key. Leave blank
+  if using perplexity_api_key_realm.
+
+param.perplexity_model = <string> Perplexity chat model to use for the ask/response call.
+  Default: sonar
