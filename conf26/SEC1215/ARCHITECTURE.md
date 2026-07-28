@@ -13,7 +13,9 @@ and then deliberately retired in favor of a much simpler synchronous design
 (v1.3.3) — the loop below reflects what's actually shipping today, with the
 retired bridge folded into Takeaway 3 as a concrete, worked pitfall.
 
-## The loop at a glance (shipped — v1.3.3)
+## The loop at a glance
+
+**Shipped as of v1.3.3.**
 
 ```
 ES Correlation Search
@@ -34,7 +36,9 @@ ES Correlation Search
 
 One process, one request/response, no polling, no second index, no bridge.
 
-## Phase 1 — ES alert-action output feeds the agentic AI (shipped)
+## Phase 1: ES alert-action output feeds the agentic AI
+
+**Shipped.**
 
 `TA_ResponseActions` (Adaptive Response Action `notable_to_slack_json`) takes
 the triggering notable/finding, keeps every CIM/risk/notable field, strips
@@ -51,7 +55,9 @@ practice: Splunk gives you the Adaptive Response framework, `cim_actions.py`'s
 `ModularAction` for native panel reporting, and the CIM field set for free —
 the delivery shaping and the standing-question payload are what you build.
 
-## Phase 2 — the AI answers, in-line, before delivery (shipped — v1.3.3)
+## Phase 2: the AI answers, in-line, before delivery
+
+**Shipped as of v1.3.3.**
 
 The gap the talk calls out: getting an AI's answer is easy; getting it back
 into Splunk in a *usable* shape, quickly, is the actual engineering problem.
@@ -75,7 +81,9 @@ fold the AI's answer into Splunk's Risk-Based Alerting / `All_Risk` data
 model as a first-class risk modifier — see "What this doesn't do" below and
 the retired bridge's write-up for what that would have taken.
 
-## Phase 3 — one payload, three existing write-back paths (shipped)
+## Phase 3: one payload, three existing write-back paths
+
+**Shipped.**
 
 Once `perplexity_response` is merged in, the *same* envelope flows into every
 write-back path `TA_ResponseActions` already had — no new API surface at all:
@@ -98,7 +106,7 @@ Nothing here required a new index, a new credential realm beyond the
 Perplexity API key, or a background process — it's the same three consumers
 v1.2.0 already fed, just now also fed `perplexity_response`.
 
-### What this doesn't do (an honest scope note for the talk)
+### What this doesn't do: an honest scope note
 
 The original three-phase narrative described mapping the AI's verdict onto
 CIM Risk data model fields (`risk_object`, `risk_object_type`, `risk_score`,
@@ -117,7 +125,9 @@ Alerting would still want something like the bridge's HEC write — just built
 with a request/response pattern from the start, not a poll loop bolted on
 after.
 
-## Lesson: the Slack → HEC bridge (retired, v1.3.1–v1.3.2)
+## Lesson: the Slack to HEC bridge, retired
+
+**Shipped as v1.3.1–v1.3.2. Retired in v1.3.3.**
 
 `bin/slack_hec_bridge.py` was a classic Splunk scripted input
 (`default/inputs.conf`) that closed the loop asynchronously: it polled the
@@ -178,6 +188,20 @@ hindsight. That arc — try the more powerful/complex thing, learn exactly what
 it costs, then replace it with the smallest thing that solves the actual
 demo's problem — is itself Takeaway 3's central point.
 
+What made the turnaround fast wasn't caution, it was the opposite: trusting
+the platforms enough to remove the defensive plumbing built around them.
+Item 3 above (reply-format drift) was worked around by asking the model
+nicely and hoping; the fix wasn't a better prompt, it was noticing Perplexity
+already has a `response_format`/JSON Schema feature that constrains output
+structurally — trust the API to do that instead of parsing free text
+yourself. Items 2 and 5 were worked around with a second scripted process
+polling a chat app for a reply and racing the clock to read it back; the fix
+was noticing Adaptive Response actions already run synchronously with full
+context, so Splunk didn't need a hand-off at all — trust the platform's own
+execution model instead of building around it. Once both of those were trusted rather
+than defended against, the bridge's entire reason for existing disappeared,
+and replacing it took hours, not another sprint.
+
 ## How this maps back to the session's takeaways
 
 - **Takeaway 1** (choosing the right LLM) is why Phase 1's payload is a full,
@@ -193,7 +217,10 @@ demo's problem — is itself Takeaway 3's central point.
   search.
 - **Takeaway 3** (avoiding pitfalls) is the "Lesson" section above in full —
   a real design that shipped, worked, and was still worth replacing once its
-  operational cost became clear.
+  operational cost became clear. It's also the fast-reaction story: once the
+  pitfalls were understood, trusting the platforms' own features over
+  hand-built workarounds turned a multi-component rebuild into a same-day
+  patch release.
 
 ## Status
 

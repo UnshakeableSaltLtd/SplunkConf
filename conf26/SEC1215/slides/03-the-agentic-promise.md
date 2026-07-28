@@ -25,5 +25,10 @@ overall risk score is the sum of every risk modifier's `risk_score` for it. Refe
 for the score — reference:
 [CIM Risk data model reference](https://dev.splunk.com/view/enterprise-security/SP-CAAAFBM).
 
-Don't over-explain yet — this slide is intentionally a teaser for Phase 2 (slide 8). The
-point right now is just: "posted to Slack" is not the same thing as "usable by Splunk."
+Don't over-explain yet — this slide is intentionally a teaser for slide 8, where we walk
+through the design we built *first* to chase exactly this bar (mapping the AI's verdict onto
+`risk_object`/`risk_object_type`/`risk_score`). Small honest caveat to set up now so it isn't
+a surprise later: what ships today (v1.3.3, slide 5) deliberately does not push the AI's
+answer into the risk index — that trade-off, and why it was still the right call, is Takeaway
+3's whole arc. The point right now is just: "posted to Slack" is not the same thing as
+"usable by Splunk."
