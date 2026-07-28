@@ -108,10 +108,12 @@ that invokes the action (correlation search owner, or an analyst running it ad h
 
 1. Copy this folder to `$SPLUNK_HOME/etc/apps/TA_ResponseActions/`, restart Splunk.
 2. Store the Slack bot token in Splunk's credential vault (recommended over plaintext):
-   ```
+
+   ``` shell
    curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
      -u admin:<pass> -d name=slack_notable_action -d realm=slack_notable_action -d password=xoxb-...
    ```
+
 3. In ES, ensure this app is covered by **Configure > General > App Import** so ES recognizes it
    as an Adaptive Response provider.
 4. On a correlation search, **Add New Response Action > Send Notable to Slack (Full JSON)**.
@@ -121,11 +123,13 @@ that invokes the action (correlation search owner, or an analyst running it ad h
    correlation search directly.
 6. **(New in 1.3.3)** Store the Perplexity API key in the vault under realm
    `perplexity_notable_action` (same pattern as step 2, different realm name):
-   ```
+
+   ``` shell
    curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
      -u admin:<pass> -d name=perplexity_notable_action -d realm=perplexity_notable_action \
      -d password=<perplexity_api_key>
    ```
+
    Get a key at [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api). Alternatively
    set `param.perplexity_api_key` directly on the action (plaintext fallback).
 
