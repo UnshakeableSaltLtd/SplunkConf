@@ -16,9 +16,9 @@ Do NOT build slides from a blank pptxgenjs theme or generic Nexus design system 
 
 ## The Master Template
 
-The source of truth is `conf26_Breakout_Template.pptx`, a 46-slide Cisco/Splunk-branded template deck. It has been uploaded to this project's file repository — retrieve it with `search_files` (filename `conf26_Breakout_Template.pptx`) if it is not already in the local workspace. The user's own copy lives on their Mac at:
-`/Users/dpollard/Library/CloudStorage/OneDrive-UnshakeableSaltLtd/Splunk .Conf26/Template Material/conf26_Breakout_Template.pptx`
-(pull it with the personal-computer-cli `pc pull` tool if a fresher copy is ever needed).
+The source of truth is `conf26_Breakout_Template.pptx`, a 46-slide Cisco/Splunk-branded template deck. It has been uploaded to this project's file repository — retrieve it with `search_files` (filename `conf26_Breakout_Template.pptx`) if it is not already in the local workspace. The user's own copy lives in github at  at:
+`https://github.com/UnshakeableSaltLtd/SplunkConf/blob/main/docs/conf26_Breakout_Template.pptx`
+
 
 Slide 5 of the template documents the typeface rules; slide 6 documents colors and elements. Slides 12-24 are the reusable content layouts (title, agenda, section header, statement, quote, half-slide, etc.) — see the layout index below.
 
@@ -86,14 +86,14 @@ Generic design-quality checks (e.g. WCAG contrast, 0.5" edge margins, element ce
 
 ## GitHub Repository — Source of Truth for Everything in This Project
 
-Everything for this project lives in the GitHub repo `UnshakeableSaltLtd/SplunkConf` (private), and every talk is a `conf<year>/<SESSION_ID>/` folder there. This project's active talk is:
+Everything for this project lives in the GitHub repo `UnshakeableSaltLtd/SplunkConf` (private), and every talk is a `conf<year>/<SESSION_ID>/` folder there. This project's main location for content in 2026 is:
 
-`https://github.com/UnshakeableSaltLtd/SplunkConf/tree/main/conf26/SEC1053`
+`https://github.com/UnshakeableSaltLtd/SplunkConf/conf26`
 
-- `conf26/SEC1053/SEC1053.md` — the official session brief (title, abstract, and the 3 official takeaways). Always read this before drafting slide content — it is the source of truth for talk structure and takeaways, not the folder's `README.md` (which can drift out of date; cross-check the two and flag mismatches to the user rather than silently trusting either).
-- `conf26/SEC1053/README.md` — session metadata (date, speaker, track, skill level) plus a content index.
-- `conf26/SEC1053/slides/` — presentation slides (PPTX). **Every new slide is a separate, individually named PPTX file in this folder — never overwrite or edit a previously delivered slide file.** This preserves earlier work whether it was authored inside or outside this project.
-- `conf26/SEC1053/demos/`, `conf26/SEC1053/images/` — demo scripts and diagrams/screenshots.
+- `SEC1053/SEC1053.md` — the official session brief (title, abstract, and the 3 official takeaways). Always read this before drafting slide content — it is the source of truth for talk structure and takeaways, not the folder's `README.md` (which can drift out of date; cross-check the two and flag mismatches to the user rather than silently trusting either).
+- `SEC1053/README.md` — session metadata (date, speaker, track, skill level) plus a content index.
+- `SEC1053/slides/` — presentation slides (PPTX). **Every new slide is a separate, individually named PPTX file in this folder — never overwrite or edit a previously delivered slide file.** This preserves earlier work whether it was authored inside or outside this project.
+- `SEC1053/demos/`, `conf26/SEC1053/images/` — demo scripts and diagrams/screenshots.
 - `docs/conf26_Breakout_Template.pptx` — a repo-level copy of the master brand template (same file as the project's uploaded `conf26_Breakout_Template.pptx`).
 
 **Sync behavior:** files uploaded to this Perplexity project's file repository (via `upload_file`) or shared with the user (via `share_file`) are automatically synced into this GitHub repo. There is no need to manually push slide deliverables — but always spot-check (`gh api repos/UnshakeableSaltLtd/SplunkConf/contents/<path>`) that the expected file landed correctly after delivering.

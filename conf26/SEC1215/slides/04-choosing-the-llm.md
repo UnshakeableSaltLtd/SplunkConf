@@ -3,7 +3,9 @@
 Four axes that actually matter — not "which model tops the leaderboard":
 
 - **Cost** — priced per notable/investigation, not per demo. A SOC generates volume; the
-  biggest frontier model on every single notable gets expensive fast.
+  biggest frontier model on every single notable gets expensive fast. Learning as we did this,
+  treat the same as developing detections.  
+  Start wide, tuning and become efficient. 35 cents to 0.07 per transaction
 - **Latency** — the call happens synchronously, in-line, inside the alert action itself. The
   correlation search's adaptive response doesn't finish until the model replies, so round-trip
   time is part of the alert pipeline's own latency budget, not a footnote.

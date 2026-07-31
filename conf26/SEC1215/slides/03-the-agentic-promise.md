@@ -5,6 +5,7 @@
   score, correlate, and dashboard.
 - An LLM's reply is prose, or loose JSON at best — Enterprise Security's Risk Analysis
   framework and Incident Review don't care what the AI *said*. They care about **fields**.
+- Start with Smart LLM's and tune down to specific API addressing.
 - This talk is the plumbing between "the AI had a thought" and "the SOC analyst sees a risk
   score, with zero copy/paste."
 
