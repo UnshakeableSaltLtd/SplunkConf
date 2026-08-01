@@ -37,32 +37,41 @@ Correct the common misconception. Splunk ES's asset framework was built to consu
 
 You don't need a new tool — you need to trust your existing telemetry: DHCP leases, VPN/NAC logs, EDR/endpoint check-ins, cloud provider metadata (AWS/Azure/GCP tags), DNS, AD/Entra ID. Every one of these already proves an asset is alive, right now — fresher than any CMDB export.
 
-## Slide 6 — The Hard Part: Identity Correlation, Not Collection
+## Slide 6 — The Data You Don't Have (And Why That's Why Enterprise Security Fails)
 
-The real challenge isn't gathering the data, it's correlating hostname/IP/MAC/cloud-instance-ID into one canonical asset identity over time — through DHCP churn, VPN NAT, ephemeral instances. Introduce the need for a normalization schema here.
+The honest counterpart to Slide 5. Even with DHCP, VPN, EDR, and cloud metadata feeding in, there are always gaps — and those gaps are where breaches actually happen.
 
-## Slide 7 — Building the "Poor Man's CMDB" in Splunk
+- **Classic blind spots:** unmanaged BYOD, shadow IT/SaaS nobody provisioned through IT, decommissioned-but-still-live cloud resources nobody tore down, OT/IoT devices with no agent capability, contractor/third-party laptops, orphaned service accounts, undocumented API integrations, pre-EDR-rollout assets, and M&A-inherited environments never fully onboarded.
+- **The core point:** an unmonitored asset isn't a "known unknown" on a risk register — it's genuinely invisible. Your SIEM, EDR, and vulnerability scanner are only as good as their coverage; nothing analyzes telemetry that was never generated.
+- **Reframe the failure mode:** security incidents are rarely "the SOC missed the alert." They're far more often "there was no telemetry source there at all" — the forgotten storage bucket, the still-routable decommissioned VPN concentrator, the admin account nobody remembered existed.
+- **Bridge to Takeaway 1:** this is exactly why *continuous* discovery matters more than a one-off inventory project — the goal isn't to close the gap once, it's to keep noticing when something new and unmonitored appears.
+
+## Slide 7 — The Hard Part: Identity Correlation, Not Collection
+
+The real challenge with the data you *do* have isn't gathering it, it's correlating hostname/IP/MAC/cloud-instance-ID into one canonical asset identity over time — through DHCP churn, VPN NAT, ephemeral instances. Introduce the need for a normalization schema here.
+
+## Slide 8 — Building the "Poor Man's CMDB" in Splunk
 
 Scheduled searches normalize and push identity data into KV Store lookups — continuously refreshed, always current. Reference Asset and Risk Intelligence (ARI) as Splunk's productized version of this exact pattern.
 
-## Slide 8 — Architecture Walkthrough
+## Slide 9 — Architecture Walkthrough
 
 Data flow diagram: sources → normalization searches → KV Store lookup → ES Asset framework → enriched notable events. Show the actual lookup schemas here — `asset_lookup_schema.json` / `identity_lookup_schema.json` and the ES 8.5.1 YAML templates already in `conf26/SEC1053/Proof_of_concept/`.
 
-## Slide 9 — Bridge to Takeaway 2: Governance Gets Measurable
+## Slide 10 — Bridge to Takeaway 2: Governance Gets Measurable
 
 Once you have continuous coverage, map it directly to CAF Principle A3 (Asset Management) and NIST CSF ID.AM. Completeness, freshness, and ownership become auditable KPIs instead of a point-in-time spreadsheet an auditor has to take on faith.
 
-## Slide 10 — Bridge to Takeaway 3: From Visibility to Automated Action
+## Slide 11 — Bridge to Takeaway 3: From Visibility to Automated Action
 
 Tagged, risk-scored assets let you automate: rogue-asset detection when something unmanaged appears on the network, automatic ticket creation, dynamic risk re-scoring. The compliance report stops being a PDF and becomes a live trigger.
 
-## Slide 11 — Recap & Handoff
+## Slide 12 — Recap & Handoff
 
 "You don't need a CMDB — you need continuous, correlated identity." One-line summary that hands cleanly into the wrap-up slides tying back to all three official takeaways.
 
 ---
 
 **Notes:**
-- This arc builds toward all three takeaways in sequence: T1 → slides 2–8, T2 → slide 9, T3 → slide 10.
-- Supporting artifacts already in the repo that slide 8 should reference: `Proof_of_concept/Splunk ES 8.5.1 Asset Lookup — YAML Template.yml`, `Proof_of_concept/Splunk ES 8.5.1 Identity Lookup — YAML Template.yml`, and the project's `asset_lookup_schema.json` / `identity_lookup_schema.json`.
+- This arc builds toward all three takeaways in sequence: T1 → slides 2–9, T2 → slide 10, T3 → slide 11.
+- Supporting artifacts already in the repo that slide 9 should reference: `Proof_of_concept/Splunk ES 8.5.1 Asset Lookup — YAML Template.yml`, `Proof_of_concept/Splunk ES 8.5.1 Identity Lookup — YAML Template.yml`, and the project's `asset_lookup_schema.json` / `identity_lookup_schema.json`.
