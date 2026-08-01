@@ -9,6 +9,8 @@
 - T2 — Automated governance workflows for CAF / NIST CSF compliance
 - T3 — Turning compliance reports into proactive, automated security actions
 
+> **Cross-session note (idea, not yet committed to a slide):** SEC1215 ("From Zero to Agentic: Building Your First AI-Driven Threat Investigation in Splunk Enterprise Security," Tue Sep 15) builds an agentic AI loop where ES notable/CIM data is sent to an LLM (via `perplexity_ask` inside an alert action) which returns a structured, schema-shaped answer written straight back into Slack, the notable's comment trail, and a KV Store enrichment record — see [`conf26/SEC1215/ARCHITECTURE.md`](https://github.com/UnshakeableSaltLtd/SplunkConf/blob/main/conf26/SEC1215/ARCHITECTURE.md). That's a strong candidate use case for Slide 6 below: when Splunk surfaces an asset it can't classify (unknown device on the network, unrecognized cloud instance, orphaned identity), the same agentic pattern could reason over the raw signal and propose a classification/owner back into the asset KV Store — turning "data you don't have" into a self-healing gap rather than a permanent blind spot. Worth a callback line or a "see also SEC1215" pointer if both talks run at the same conference and audience overlap is likely.
+
 ---
 
 ## Slide 1 — Defining Terms: What Is an Asset? What Is an Identity?
@@ -45,6 +47,7 @@ The honest counterpart to Slide 5. Even with DHCP, VPN, EDR, and cloud metadata 
 - **The core point:** an unmonitored asset isn't a "known unknown" on a risk register — it's genuinely invisible. Your SIEM, EDR, and vulnerability scanner are only as good as their coverage; nothing analyzes telemetry that was never generated.
 - **Reframe the failure mode:** security incidents are rarely "the SOC missed the alert." They're far more often "there was no telemetry source there at all" — the forgotten storage bucket, the still-routable decommissioned VPN concentrator, the admin account nobody remembered existed.
 - **Bridge to Takeaway 1:** this is exactly why *continuous* discovery matters more than a one-off inventory project — the goal isn't to close the gap once, it's to keep noticing when something new and unmonitored appears.
+- **Possible callback (see cross-session note above):** when Splunk detects something and genuinely can't classify it, that's a candidate use case for the agentic AI pattern from SEC1215 — an LLM reasoning over the raw signal to propose what it might be and writing that back into the asset/identity KV Store, rather than the gap just sitting there until a human investigates.
 
 ## Slide 7 — The Hard Part: Identity Correlation, Not Collection
 
