@@ -1,0 +1,79 @@
+---
+# Playbook: Create RDS PostgreSQL instance 'cmdb-prod' with a restricted security group
+# Requires: amazon.aws collection (ansible-galaxy collection install amazon.aws)
+# Requires: boto3, botocore installed in the Ansible control node's Python env
+# Requires: AWS credentials available via env vars, ~/.aws/credentials, or IAM role
+
+- name: Provision cmdb-prod RDS PostgreSQL instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: "eu-west-1"          # change to your target region
+    vpc_id: "vpc-xxxxxxxx"           # REQUIRED: set your VPC ID
+    db_subnet_group_name: "default"  # REQUIRED: existing DB subnet group name
+    allowed_cidr: "88.97.75.58/32"
+    security_group_name: "postgres-prod-sg"
+    db_instance_identifier: "cmdb-prod"
+    db_instance_class: "db.t4g.micro"
+    db_engine: "postgres"
+    db_engine_version: "16.4"
+    db_master_username: "dbadmin"
+    db_allocated_storage: 20
+    db_storage_type: "gp3"
+    db_backup_retention: 7
+
+  tasks:
+    - name: Create security group allowing Postgres access only from a single IP
+      amazon.aws.ec2_security_group:
+        name: "{{ security_group_name }}"
+        description: "Postgres access restricted to a single trusted IP"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 5432
+            cidr_ip: "{{ allowed_cidr }}"
+            rule_desc: "Postgres access from trusted IP"
+        rules_egress:
+          - proto: -1
+            cidr_ip: 0.0.0.0/0
+            rule_desc: "Allow all outbound"
+        tags:
+          Name: "{{ security_group_name }}"
+          Environment: "prod"
+      register: sg_result
+
+    - name: Show created security group ID
+      debug:
+        msg: "Security group ID: {{ sg_result.group_id }}"
+
+    - name: Create RDS PostgreSQL instance (cmdb-prod)
+      amazon.aws.rds_instance:
+        id: "{{ db_instance_identifier }}"
+        region: "{{ aws_region }}"
+        state: present
+        engine: "{{ db_engine }}"
+        engine_version: "{{ db_engine_version }}"
+        db_instance_class: "{{ db_instance_class }}"
+        allocated_storage: "{{ db_allocated_storage }}"
+        storage_type: "{{ db_storage_type }}"
+        master_username: "{{ db_master_username }}"
+        manage_master_user_password: true   # RDS generates & stores password in Secrets Manager
+        vpc_security_group_ids:
+          - "{{ sg_result.group_id }}"
+        db_subnet_group_name: "{{ db_subnet_group_name }}"
+        publicly_accessible: true            # required since access is from the internet (single IP)
+        multi_az: false
+        backup_retention_period: "{{ db_backup_retention }}"
+        deletion_protection: true
+        tags:
+          Name: "{{ db_instance_identifier }}"
+          Environment: "prod"
+      register: rds_result
+
+    - name: Show RDS endpoint once available
+      debug:
+        msg: "Endpoint: {{ rds_result.endpoint.address | default('pending - instance still creating') }}"

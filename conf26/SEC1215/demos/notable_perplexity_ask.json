@@ -1,0 +1,33 @@
+{
+  "sid": "test-harness-notable_to_perplexity_json-1785753096",
+  "search_name": "Test Harness Sample Finding",
+  "app": "search",
+  "owner": "admin",
+  "results_link": "",
+  "server_host": "localhost",
+  "server_uri": "https://localhost:8089",
+  "session_key": "",
+  "result": {
+    "event_id": "5B2F1B0A-0000-0000-0000-TESTHARNESS01",
+    "_time": "1785753096",
+    "rule_name": "Test Harness Sample Finding",
+    "search_name": "Test Harness Sample Finding",
+    "repo": "UnshakeableSaltLtd/SplunkConf",
+    "user": "dpollard",
+    "src": "203.0.113.42",
+    "dest": "10.0.0.5",
+    "signature": "Sample Finding (test_harness.py)",
+    "urgency": "medium"
+  },
+  "configuration": {
+    "additional_fields": "{\"perplexity_ask\": {\"repository_check\": \"Check that $result.repo$ is a repository we commonly see associated with this type of finding.\",\"user_check\": \"Check that $result.user$ is an expected/authorized user for this kind of activity.\",\"source_ip_check\": \"Check that source IP $result.src$ is low threat (not on any known malicious/blocklist sources).\"}}",
+    "field_denylist": "_raw,_time,_indextime,_cd,_bkt,_si,splunk_server,timestartpos,timeendpos,eventtype,punct",
+    "max_events": "5",
+    "write_back_comment": "1",
+    "write_back_kvstore": "1",
+    "perplexity_enabled": "1",
+    "perplexity_api_key_realm": "perplexity_notable_action",
+    "perplexity_model": "sonar",
+    "test_connectivity": "0"
+  }
+}
