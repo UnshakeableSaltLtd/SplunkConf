@@ -55,6 +55,19 @@ log = ta_common.setup_logging(APP_NAME)
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] != "--execute":
+        # This is the ONLY place this script exits 1 - see the matching
+        # comment in notable_to_perplexity_json.py. Log full invocation
+        # context unconditionally so a Splunk-side invocation mismatch is
+        # diagnosable from the log file alone (added in 1.4.4).
+        try:
+            log.error(
+                "FATAL invocation contract violation: expected argv[1]=='--execute', "
+                "got argv=%r | python=%s | executable=%s | cwd=%s | script=%s",
+                sys.argv, sys.version.replace("\n", " "), sys.executable,
+                os.getcwd(), os.path.abspath(__file__),
+            )
+        except Exception:
+            pass
         sys.stderr.write("FATAL usage: notable_to_slack_json.py --execute\n")
         sys.exit(1)
 

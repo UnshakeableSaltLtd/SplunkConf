@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.3
+**Version:** 1.4.4
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -301,6 +301,30 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.4
+
+- **Diagnosable "error code 1"**: both scripts exit 1 in exactly one place — right at the top,
+  before stdin is even read, if `sys.argv[1] != "--execute"`. Every other failure path (bad JSON,
+  credential lookup, API auth) exits 2 or 3, so exit 1 always means Splunk did not invoke the
+  script with the standard custom alert action contract (`script --execute`, payload JSON on
+  stdin) — e.g. a stale/shadowing app copy, a config that never made it onto the server, or the
+  action firing outside the expected `sendalert`/correlation-search path. This used to only write
+  `FATAL usage: ...` to stderr, which meant root-causing it required pulling the exact stderr text
+  out of the Job Inspector's `search.log`. Both scripts now also unconditionally log the full
+  invocation context — `argv`, Python version/executable, cwd, and resolved script path — to their
+  own log file (falling back to stderr via `logging.basicConfig` if the log file itself can't be
+  opened, which will usually still surface in the Job Inspector). Grep for `FATAL invocation
+  contract violation` to diagnose this class of failure from the log alone.
+- **Fixed inconsistent executable bit**: `notable_to_perplexity_json.py` was the only one of the
+  three `bin/` scripts marked executable; `notable_to_slack_json.py` and `test_harness.py` are now
+  `chmod +x` too, matching their shebang lines. Splunk invokes both actions via the configured
+  Python interpreter either way (`python.version = python3` in `alert_actions.conf`), so this was
+  not itself the cause of any invocation failure, but it's fixed for consistency and so
+  `test_harness.py` and `notable_to_slack_json.py` can be run directly (`./notable_to_slack_json.py
+  --execute`) the same way `notable_to_perplexity_json.py` already could.
+- Version bumped **1.4.3 → 1.4.4** (patch bump — diagnostics and permissions only, no interface or
+  behavioral changes to the normal success path).
 
 ### 1.4.3
 
