@@ -1,7 +1,7 @@
 # Briefing Paper: Bringing Assets and Identity Under Control Without a CMDB or a Single Source of Truth
 
 **Prepared by:** David Pollard, Unshakeable Salt Ltd
-**Audience:** [Client name] — CISO / Security Leadership / SOC Management
+**Audience:** Client — CISO / Security Leadership / SOC Management
 **Companion to:** Splunk .conf26 Session SEC1053, "The other AI: Assets and Identity. Using Splunk to keep in check"
 **Status:** Draft for client discussion
 
