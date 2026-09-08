@@ -48,8 +48,14 @@ param.perplexity_api_key_realm = <string> Name of the credential realm in Splunk
 param.perplexity_api_key = <string> Plaintext fallback for the Perplexity API key. Leave blank
   if using perplexity_api_key_realm.
 
-param.perplexity_model = <string> Perplexity chat model to use for the ask/response call.
-  Default: sonar
+param.perplexity_model = <string> Exact Perplexity Agent API "provider/model" id to pin for the
+  ask/response call (e.g. openai/gpt-5.6-sol). Takes precedence over perplexity_preset if set.
+  Default: (blank - falls back to perplexity_preset)
+
+param.perplexity_preset = <string> Perplexity Agent API managed preset to use instead of a pinned
+  model (e.g. fast-search, pro-search) - Perplexity tunes the underlying model/tooling over time,
+  so this needs no config change to pick up improvements. Ignored if perplexity_model is set.
+  Default: fast-search
 
 param.test_connectivity = <bool> Side-effect-free credential check mode. When enabled (1),
   the action skips ALL normal processing (no result rows are read, nothing is written back to

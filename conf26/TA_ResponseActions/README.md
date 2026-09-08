@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.4
+**Version:** 1.4.5
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -53,7 +53,8 @@ commonly seen for this kind of finding, is `$result.user$` an expected/authorize
 
 `notable_to_perplexity_json` — when `param.perplexity_enabled` is on (default) — answers that
 block **in-line, synchronously** — a single call to the
-[Perplexity Chat Completions API](https://docs.perplexity.ai/) with a JSON schema
+[Perplexity Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) (`POST
+https://api.perplexity.ai/v1/agent`, since 1.4.5 — see Release Notes) with a JSON schema
 `response_format` built from the ask keys plus an `overall` risk read-out. The result is merged
 back into the same `additional_fields` object as `perplexity_response`, then travels through:
 
@@ -268,7 +269,8 @@ Since 1.4.0 the app is visible in Splunk Web's app nav (`is_visible = 1`) with t
    as an Adaptive Response provider.
 4. On a correlation search, **Add New Response Action** and add either or both:
    - **Send Notable to Perplexity API (Agentic Response)** — configure `perplexity_enabled`,
-     `perplexity_model`, `additional_fields` (the `perplexity_ask` block), and save.
+     `perplexity_model`/`perplexity_preset`, `additional_fields` (the `perplexity_ask` block), and
+     save.
    - **Send Notable to Slack (ES Findings)** — configure `delivery_method`, `slack_channel`
      (defaults to `C0BKA6D4AFL` / `#es-findings`), `additional_fields`, and save.
 5. Test via Incident Review → Run Adaptive Response Actions on a notable, or trigger the
@@ -301,6 +303,48 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.5
+
+- **Migrated from the legacy Sonar `/chat/completions` endpoint to Perplexity's Agent API**
+  (`POST https://api.perplexity.ai/v1/agent`). Perplexity is sunsetting `/chat/completions` on
+  27 September 2026 ("Sonar Chat Completions is now Agent API" — see the
+  [Sonar quickstart](https://docs.perplexity.ai/docs/sonar/quickstart) and
+  [migration guide](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview)), and
+  this app's Perplexity organisation/project API keys turned out to be Agent-API-only already —
+  `/chat/completions` returned HTTP 403 `Perplexity organization API keys are not supported on
+  this endpoint.` even against a freshly issued key from
+  [console.perplexity.ai/project/keys](https://console.perplexity.ai/project/keys).
+- **Request shape changed**: the old `messages` array (`system`/`user` roles) is replaced by the
+  Agent API's `instructions` (system prompt, applied every turn) and `input` (the specific
+  question/task) fields — see the
+  [prompt guide](https://docs.perplexity.ai/docs/agent-api/building-agents/prompt-the-agent).
+  `response_format` (JSON-schema structured output) keeps the same shape as before —
+  `{"type": "json_schema", "json_schema": {"name": ..., "schema": ...}}` — so the
+  `perplexity_ask`/`perplexity_response` schema-building logic in `get_perplexity_response()` was
+  untouched. `max_tokens` is renamed `max_output_tokens`.
+- **Response parsing changed**: the old single `choices[0].message.content` string is replaced by
+  an `output` array that can contain multiple item types (e.g. a `search_results` item alongside a
+  `message` item); a new `extract_agent_output_text()` helper in `ta_common.py` walks that array
+  for the `message` item's text content. See the
+  [output control docs](https://docs.perplexity.ai/docs/agent-api/output-control).
+- **Model configuration changed**: the old free-text `param.perplexity_model` (default `sonar`,
+  which no longer exists on this endpoint) is now optional — set it to pin an exact
+  `provider/model` id (e.g. `openai/gpt-5.6-sol`), or leave it blank to use the new
+  `param.perplexity_preset` (default `fast-search`, a quick web-search-capable preset chosen as
+  the closest match to the old Sonar default's speed/cost profile for these short triage checks).
+  An explicit `perplexity_model` always wins over `perplexity_preset`. See
+  [presets](https://docs.perplexity.ai/docs/agent-api/presets).
+- `check_perplexity_connectivity()`'s probe call and `get_perplexity_response()`'s main
+  ask/response call both moved onto the new helpers (`resolve_perplexity_model_or_preset()`,
+  `extract_agent_output_text()`) so both paths stay in lockstep on request/response shape.
+- `test_harness.py` needed no functional changes — it shells out to the real script exactly as
+  Splunk would, so it exercises whatever `alert_actions.conf` (or `--override`) configures; its
+  `--override` help text example was updated to show the new `perplexity_preset`/`perplexity_model`
+  options instead of the retired `sonar-pro`.
+- Version bumped **1.4.4 → 1.4.5** (patch bump — credential/endpoint migration forced by
+  Perplexity's own API changes; no change to this app's own external interface/behavioural
+  contract beyond the `perplexity_model`/`perplexity_preset` config split described above).
 
 ### 1.4.4
 
