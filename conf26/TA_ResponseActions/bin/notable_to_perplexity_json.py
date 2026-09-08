@@ -259,9 +259,13 @@ def main():
                         payload.get("server_uri"),
                         payload.get("session_key"),
                         event_id,
-                        f"Perplexity ask/response processed at {envelope['sent_at']}.\n"
-                        f"Additional fields: "
-                        f"{json.dumps(envelope.get('additional_fields'), default=str)}",
+                        # Human-readable narrative, not a single-line JSON
+                        # blob - Incident Review/Mission Control renders
+                        # this comment as plain text, so json.dumps() here
+                        # used to show up to the analyst as raw JSON.
+                        ta_common.format_perplexity_comment(
+                            envelope.get("sent_at"), envelope.get("additional_fields")
+                        ),
                         log,
                     )
                 except Exception:
