@@ -469,6 +469,84 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
 
 
 # ----------------------------------------------------------------------
+# Render the perplexity_ask/perplexity_response pair as short, readable
+# prose for the notable's own Activity/Finding-update comment timeline.
+# Incident Review/Mission Control renders this comment as plain text, so a
+# single-line json.dumps() blob (the previous behaviour) displays to the
+# analyst as raw, unformatted JSON. This builds a plain-text narrative
+# instead - pairing each perplexity_ask question with its matching
+# perplexity_response answer under a human-readable label - while still
+# falling back to an indented (still human-readable) JSON dump for any
+# other/unexpected additional_fields shape, so nothing is silently dropped.
+# ----------------------------------------------------------------------
+# Common acronyms/initialisms that would otherwise get title-cased into an
+# awkward form (e.g. "Source ip check" instead of "Source IP check") when
+# turning a snake_case check key into a human-readable label.
+_LABEL_ACRONYMS = {"ip", "url", "id", "kv", "api", "tls", "ssl", "dns", "cidr", "asn"}
+
+
+def _humanize_check_label(key):
+    words = key.replace("_", " ").strip().split(" ")
+    out = []
+    for i, word in enumerate(words):
+        if word.lower() in _LABEL_ACRONYMS:
+            out.append(word.upper())
+        elif i == 0:
+            out.append(word.capitalize())
+        else:
+            out.append(word.lower())
+    return " ".join(out)
+
+
+def format_perplexity_comment(sent_at, additional_fields):
+    additional_fields = additional_fields or {}
+    ask = additional_fields.get("perplexity_ask") or {}
+    response = additional_fields.get("perplexity_response") or {}
+    lines = [f"Perplexity ask/response processed at {sent_at}."]
+
+    if not isinstance(ask, dict) or not isinstance(response, dict) or (not ask and not response):
+        # Nothing in the expected ask/response shape - fall back to an
+        # indented (not single-line) JSON dump so it's at least readable.
+        if additional_fields:
+            lines.append("")
+            lines.append("Additional fields:")
+            lines.append(json.dumps(additional_fields, indent=2, default=str))
+        return "\n".join(lines)
+
+    overall = response.get("overall")
+    if overall:
+        lines.append("")
+        lines.append(f"Overall: {overall}")
+
+    check_keys = list(ask.keys()) or [k for k in response.keys() if k != "overall"]
+    if check_keys:
+        lines.append("")
+        lines.append("Checks:")
+        for key in check_keys:
+            label = _humanize_check_label(key)
+            question = ask.get(key)
+            answer = response.get(key)
+            lines.append(f"- {label}")
+            if question:
+                lines.append(f"    Asked: {question}")
+            if answer:
+                lines.append(f"    Result: {answer}")
+
+    # Anything beyond the two known keys is still surfaced, just indented
+    # rather than crammed onto the same line as everything else.
+    extra = {
+        k: v for k, v in additional_fields.items()
+        if k not in ("perplexity_ask", "perplexity_response")
+    }
+    if extra:
+        lines.append("")
+        lines.append("Other fields:")
+        lines.append(json.dumps(extra, indent=2, default=str))
+
+    return "\n".join(lines)
+
+
+# ----------------------------------------------------------------------
 # Write the collected data back onto the SAME notable so it shows up in
 # the analyst's queue as part of that notable's own Activity trail (not
 # just a status flag). Only comment/status/urgency/newOwner/disposition

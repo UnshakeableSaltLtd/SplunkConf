@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.6
+**Version:** 1.4.7
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -303,6 +303,25 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.7
+
+- **Fixed: `notable_to_perplexity_json`'s write-back comment on the notable's own
+  Activity/Finding-update timeline displayed as raw, single-line JSON** in Incident
+  Review/Mission Control, e.g. `Additional fields: {"perplexity_ask": {...}, ...}`. Root
+  cause: the comment body was built with `json.dumps(envelope['additional_fields'])` and
+  posted as-is - readable to a script, not to an analyst reading the Finding Update panel.
+  Fixed by adding `ta_common.format_perplexity_comment()`, which renders the same data as a
+  short plain-text narrative (an `Overall:` summary line, followed by each `perplexity_ask`
+  question paired with its matching `perplexity_response` answer under a human-readable
+  label, e.g. "Source IP check" rather than the raw `source_ip_check` key), while still
+  falling back to an indented JSON dump for any additional_fields shape outside the expected
+  ask/response pair so nothing is silently dropped. The KV store enrichment record (used by
+  the `notable_agentic_enrichment_drilldown` dashboard's dedicated "Raw additional_fields
+  JSON" panel) is unchanged and still stores the raw JSON, since that panel is explicitly for
+  programmatic/raw inspection.
+- Version bumped **1.4.6 → 1.4.7** (patch bump, comment-formatting/display fix only - no
+  request/response shape, KV store schema, or config schema changes).
 
 ### 1.4.6
 
