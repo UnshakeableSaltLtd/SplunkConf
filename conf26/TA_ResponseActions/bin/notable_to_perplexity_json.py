@@ -106,7 +106,15 @@ def main():
     write_back_kvstore = (cfg.get("write_back_kvstore", "1")) in ("1", "true", "True")
     perplexity_enabled = (cfg.get("perplexity_enabled", "1")) in ("1", "true", "True")
     test_connectivity = (cfg.get("test_connectivity", "0")) in ("1", "true", "True")
-    kvstore_app = payload.get("app", "TA_ResponseActions") or "TA_ResponseActions"
+    # NOTE: deliberately NOT derived from payload.get("app") - that key holds
+    # the app context of the TRIGGERING saved search (e.g. "TA_AllIndexCreation",
+    # "SplunkEnterpriseSecuritySuite"), which varies per correlation search and
+    # is never where the notable_agentic_enrichment collection lives. The
+    # collection is defined exclusively in TA_ResponseActions/default/collections.conf,
+    # so the KV store REST path must always target that app regardless of which
+    # app's search fired the alert - using payload["app"] here caused a 404 on
+    # every write-back (Not Found under the triggering app's own namespace).
+    kvstore_app = "TA_ResponseActions"
 
     # Unconditional heartbeat: every single invocation of this script leaves
     # this log line no matter what happens next (bad payload, no rows, an

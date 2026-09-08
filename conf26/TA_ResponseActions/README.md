@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.5
+**Version:** 1.4.6
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -303,6 +303,28 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.6
+
+- **Fixed: Splunk invoked both alert action scripts with no `--execute` argument at all**,
+  tripping the FATAL invocation-contract check added in 1.4.4. Root cause: `alert_actions.conf`
+  explicitly overrides `alert.execute.cmd` (to `notable_to_perplexity_json.py` /
+  `notable_to_slack_json.py`), which disables Splunk's default auto-injection of `--execute` as
+  `argv[1]` - that auto-behaviour only applies when `alert.execute.cmd` is left unset. Once
+  customised, every argument (including `--execute`) must be supplied explicitly via
+  `alert.execute.cmd.arg.N`. Fixed by adding `alert.execute.cmd.arg.1 = --execute` to both
+  stanzas. Confirmed via `sendmodalert`/`AlertNotifierWorker` internal logs and the scripts' own
+  logs against a real triggered alert (`Detect GitHub Push`) on Splunk Enterprise 10.4.3.
+- **Fixed: KV store enrichment write-back returned HTTP 404** on every invocation. Root cause:
+  `kvstore_app` was derived from `payload.get("app", "TA_ResponseActions")`, but Splunk's alert
+  payload always populates `"app"` with the *triggering saved search's* own app context (e.g.
+  `TA_AllIndexCreation`, `SplunkEnterpriseSecuritySuite`), never `TA_ResponseActions` - so the
+  fallback never applied and the REST write targeted a namespace where the
+  `notable_agentic_enrichment` collection doesn't exist. Fixed by hardcoding `kvstore_app =
+  "TA_ResponseActions"` in both scripts, since that's the only app that ever owns this collection
+  (`default/collections.conf`), regardless of which app's search fires the alert.
+- Version bumped **1.4.5 → 1.4.6** (patch bump, live-environment bug fixes only - no request/
+  response shape or config schema changes beyond the two `alert.execute.cmd.arg.1` additions).
 
 ### 1.4.5
 
