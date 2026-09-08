@@ -46,7 +46,14 @@ import urllib.request
 
 TOKEN_RE = re.compile(r"\$(result|job)\.([A-Za-z0-9_.]+)\$")
 THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
-PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+# v1.4.5: migrated from the legacy Sonar /chat/completions endpoint to the Agent
+# API. Perplexity is sunsetting /chat/completions on 27 Sep 2026 ("Sonar Chat
+# Completions is now Agent API" - https://docs.perplexity.ai/docs/sonar/quickstart),
+# and this app's organisation/project API keys are Agent-API-only in any case -
+# /chat/completions now returns HTTP 403 "Perplexity organization API keys are not
+# supported on this endpoint." for those keys, confirmed against a freshly issued
+# console.perplexity.ai/project/keys key. See README.md release notes for 1.4.5.
+PERPLEXITY_API_URL = "https://api.perplexity.ai/v1/agent"
 
 # Known Slack Web API error codes that mean "this credential is bad", as opposed to a
 # transient network problem or a channel/permission issue unrelated to the token itself.
@@ -73,9 +80,10 @@ class SlackApiError(RuntimeError):
 
 
 class PerplexityApiError(RuntimeError):
-    """Raised for any non-2xx response from api.perplexity.ai. is_auth_error flags
-    401/403 specifically (bad/expired API key) so callers can distinguish "the key is
-    wrong" from "the API had a bad day" (rate limit, 5xx, timeout, etc.) in the log."""
+    """Raised for any non-2xx response from api.perplexity.ai (the Agent API,
+    /v1/agent). is_auth_error flags 401/403 specifically (bad/expired/unsupported API
+    key) so callers can distinguish "the key is wrong" from "the API had a bad day"
+    (rate limit, 5xx, timeout, etc.) in the log."""
 
     def __init__(self, status_code, body):
         self.status_code = status_code
@@ -285,17 +293,71 @@ def resolve_perplexity_api_key(cfg, server_uri, session_key, app, log):
 # bridge required. Used only by notable_to_perplexity_json.py.
 # https://docs.perplexity.ai/docs/agent-api/output-control (structured outputs)
 # ----------------------------------------------------------------------
-def call_perplexity_api(api_key, model, messages, response_format=None, max_tokens=None, timeout=30):
-    """Low-level POST to /chat/completions, shared by the real ask/response path and
-    the test_connectivity check below. Raises PerplexityApiError on any non-2xx
-    response, carrying the HTTP status and raw response body so the caller can log
-    the EXACT reason (e.g. the API's own "Invalid API key provided." text on a 401)
-    instead of a bare stack trace."""
-    req_body = {"model": model, "messages": messages}
+def resolve_perplexity_model_or_preset(cfg):
+    """Returns (model, preset) - exactly one of the two will be truthy. The Agent API
+    replaces the legacy single free-text "model" string (e.g. the old default
+    "sonar", which no longer exists on this endpoint) with a choice between a
+    specific "provider/model" id (param.perplexity_model, e.g. "openai/gpt-5.6-sol")
+    or a Perplexity-managed preset (param.perplexity_preset, e.g. "fast-search") that
+    picks up future model/tooling improvements with no config change. An explicit
+    param.perplexity_model always wins if set; otherwise we fall back to
+    param.perplexity_preset, defaulting to "fast-search" (a quick, web-search-capable
+    preset - the closest equivalent to the old "sonar" default's speed/cost profile
+    for these short triage checks). See https://docs.perplexity.ai/docs/agent-api/presets
+    """
+    model = (cfg.get("perplexity_model") or "").strip()
+    if model:
+        return model, None
+    preset = (cfg.get("perplexity_preset") or "fast-search").strip()
+    return None, preset
+
+
+def extract_agent_output_text(result):
+    """Extract the model's reply text from an Agent API (/v1/agent) response body.
+    Unlike the legacy /chat/completions endpoint (a single result["choices"][0]
+    ["message"]["content"] string), the Agent API returns an "output" array that can
+    contain several item types (e.g. a "search_results" item alongside a "message"
+    item) - we want the text content of the "message" item.
+    https://docs.perplexity.ai/docs/agent-api/output-control
+    https://docs.perplexity.ai/docs/resources/faq
+    """
+    for item in result.get("output") or []:
+        if item.get("type") != "message":
+            continue
+        for part in item.get("content") or []:
+            if part.get("type") in ("output_text", "text") and part.get("text"):
+                return part["text"]
+    raise KeyError('no "message" item with text content found in Agent API "output" array')
+
+
+def call_perplexity_api(api_key, input_text, instructions=None, model=None, preset=None,
+                         response_format=None, max_output_tokens=None, timeout=30):
+    """Low-level POST to /v1/agent (Perplexity's Agent API), shared by the real
+    ask/response path and the test_connectivity check below. Raises
+    PerplexityApiError on any non-2xx response, carrying the HTTP status and raw
+    response body so the caller can log the EXACT reason (e.g. the API's own auth
+    error text on a 401/403) instead of a bare stack trace.
+
+    Exactly one of `model` (a specific "provider/model" id, e.g.
+    "openai/gpt-5.6-sol") or `preset` (a managed configuration, e.g. "fast-search")
+    must be supplied - see resolve_perplexity_model_or_preset(). `model` takes
+    precedence if both are somehow set. `instructions` carries the system prompt
+    (applied every turn); `input_text` is the actual question/task for this call -
+    see https://docs.perplexity.ai/docs/agent-api/building-agents/prompt-the-agent
+    """
+    if not model and not preset:
+        raise ValueError("call_perplexity_api requires either model= or preset=")
+    req_body = {"input": input_text}
+    if instructions is not None:
+        req_body["instructions"] = instructions
+    if model:
+        req_body["model"] = model
+    else:
+        req_body["preset"] = preset
     if response_format is not None:
         req_body["response_format"] = response_format
-    if max_tokens is not None:
-        req_body["max_tokens"] = max_tokens
+    if max_output_tokens is not None:
+        req_body["max_output_tokens"] = max_output_tokens
     req = urllib.request.Request(
         PERPLEXITY_API_URL,
         data=json.dumps(req_body).encode("utf-8"),
@@ -324,7 +386,8 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
         )
         return None
 
-    model = (cfg.get("perplexity_model") or "sonar").strip()
+    model, preset = resolve_perplexity_model_or_preset(cfg)
+    model_desc = model or f"preset:{preset}"
     ask_keys = list(perplexity_ask.keys())
 
     schema = {
@@ -336,7 +399,10 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
     schema["properties"]["overall"] = {"type": "string"}
     schema["required"].append("overall")
 
-    system_prompt = (
+    # instructions = the standing system prompt (applied every turn); input_text =
+    # the specific question/task for this call. See
+    # https://docs.perplexity.ai/docs/agent-api/building-agents/prompt-the-agent
+    instructions = (
         "You are a SOC triage assistant reviewing a single Splunk Enterprise Security notable. "
         "For each question below, give a concise 1-3 sentence answer grounded in the provided "
         "context and, where useful, current public information (e.g. known malicious IP ranges, "
@@ -344,61 +410,60 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
         "field with a short risk read-out synthesizing all the answers - call out anything atypical "
         "or worth a human follow-up. Answer strictly as JSON matching the given schema."
     )
-    user_prompt = (
+    input_text = (
         f"Notable context (already extracted from the finding):\n{json.dumps(context_fields, default=str)}\n\n"
         f"Questions to answer:\n{json.dumps(perplexity_ask, default=str)}"
     )
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
     response_format = {
         "type": "json_schema",
         "json_schema": {"name": "perplexity_response", "schema": schema},
     }
 
     try:
-        result = call_perplexity_api(api_key, model, messages, response_format=response_format)
+        result = call_perplexity_api(
+            api_key, input_text, instructions=instructions,
+            model=model, preset=preset, response_format=response_format,
+        )
     except PerplexityApiError as e:
         if e.is_auth_error:
             log.error(
                 "PERPLEXITY AUTH FAILURE: HTTP %s from api.perplexity.ai (key source=%s, "
                 "ask_keys=%s, model=%s): %s - perplexity_response skipped",
-                e.status_code, source, ask_keys, model, e.body,
+                e.status_code, source, ask_keys, model_desc, e.body,
             )
         else:
             log.error(
                 "PERPLEXITY API FAILURE (non-auth): HTTP %s from api.perplexity.ai (key "
                 "source=%s, ask_keys=%s, model=%s): %s",
-                e.status_code, source, ask_keys, model, e.body,
+                e.status_code, source, ask_keys, model_desc, e.body,
             )
         return None
     except Exception:
         log.exception(
             "PERPLEXITY API FAILURE: network/timeout error calling api.perplexity.ai (key "
             "source=%s, ask_keys=%s, model=%s)",
-            source, ask_keys, model,
+            source, ask_keys, model_desc,
         )
         return None
 
     try:
-        content = result["choices"][0]["message"]["content"]
-        # sonar-reasoning* models prepend a <think>...</think> block even
-        # with response_format set; strip it before parsing, just in case
-        # this TA is ever pointed at one of those models.
+        content = extract_agent_output_text(result)
+        # sonar-reasoning*-style reasoning models can prepend a <think>...</think>
+        # block even with response_format set; strip it before parsing, just in
+        # case this TA is ever pointed at one of those models.
         content = THINK_TAG_RE.sub("", content).strip()
         answer = json.loads(content)
     except Exception:
         log.exception(
             "PERPLEXITY API FAILURE: could not parse response content (key source=%s, "
             "ask_keys=%s, model=%s): %s",
-            source, ask_keys, model, result,
+            source, ask_keys, model_desc, result,
         )
         return None
 
     log.info(
         "PERPLEXITY AUTH OK: got perplexity_response for keys=%s via model=%s (key source=%s)",
-        ask_keys, model, source,
+        ask_keys, model_desc, source,
     )
     return answer
 
@@ -622,12 +687,18 @@ def check_perplexity_connectivity(cfg, server_uri, session_key, app, log):
     if not api_key:
         log.warning("PERPLEXITY AUTH SKIPPED: %s", source)
         return None, source
-    model = (cfg.get("perplexity_model") or "sonar").strip()
+    model, preset = resolve_perplexity_model_or_preset(cfg)
+    model_desc = model or f"preset:{preset}"
     try:
         call_perplexity_api(
-            api_key, model,
-            [{"role": "user", "content": "Reply with exactly: OK"}],
-            max_tokens=16,  # api.perplexity.ai now rejects max_tokens<16 with HTTP 400
+            api_key, "Reply with exactly: OK",
+            model=model, preset=preset,
+            # Agent API's documented max_output_tokens minimum is 1 (vs the legacy
+            # /chat/completions endpoint's >=16 floor), but we keep 16 here for a
+            # small safety margin - and note some providers (e.g. Anthropic models)
+            # REQUIRE max_output_tokens to be set at all.
+            # https://docs.perplexity.ai/api-reference/agent-post
+            max_output_tokens=16,
             timeout=15,
         )
     except PerplexityApiError as e:
@@ -635,21 +706,21 @@ def check_perplexity_connectivity(cfg, server_uri, session_key, app, log):
             log.error(
                 "PERPLEXITY AUTH FAILURE: HTTP %s from api.perplexity.ai (key source=%s, "
                 "model=%s): %s - this key will NOT be able to answer perplexity_ask checks",
-                e.status_code, source, model, e.body,
+                e.status_code, source, model_desc, e.body,
             )
         else:
             log.error(
                 "PERPLEXITY API FAILURE (non-auth): HTTP %s from api.perplexity.ai (key "
                 "source=%s, model=%s): %s",
-                e.status_code, source, model, e.body,
+                e.status_code, source, model_desc, e.body,
             )
         return False, f"HTTP {e.status_code}: {e.body}"
     except Exception as e:
         log.exception(
             "PERPLEXITY API FAILURE: network/timeout error calling api.perplexity.ai (key "
             "source=%s, model=%s)",
-            source, model,
+            source, model_desc,
         )
         return False, str(e)
-    log.info("PERPLEXITY AUTH OK: model=%s responded to test call (key source=%s)", model, source)
+    log.info("PERPLEXITY AUTH OK: model=%s responded to test call (key source=%s)", model_desc, source)
     return True, "ok"

@@ -261,7 +261,8 @@ def main():
     parser.add_argument(
         "--override", action="append", default=[], metavar="KEY=VALUE",
         help="Override/add a configuration value (param.* name WITHOUT the 'param.' prefix, e.g. "
-        "--override perplexity_model=sonar-pro). Repeatable. Applied on top of the conf file.",
+        "--override perplexity_preset=pro-search, or --override perplexity_model=openai/gpt-5.6-sol "
+        "to pin an exact model). Repeatable. Applied on top of the conf file.",
     )
     parser.add_argument(
         "--field", action="append", default=[], metavar="KEY=VALUE",
