@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.7
+**Version:** 1.4.8
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -303,6 +303,38 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.8
+
+- **Added: automatic notable urgency write-back.** `notable_to_perplexity_json` now sets the
+  notable's `urgency` field via the same `/services/notable_update` call used for the comment
+  write-back (bundled into a single POST when both are due - see `ta_common.update_notable()`,
+  generalised from the old `post_comment_to_notable()`). Priority order (highest wins):
+  1. The notable's own event time (`_time`, UTC) falls inside the configurable overnight window
+     (`param.overnight_start`/`param.overnight_end`, default **00:30–06:00 UTC**) → **`high`**,
+     regardless of what Perplexity concluded - out-of-hours activity (e.g. a GitHub push at 2am)
+     is treated as inherently suspicious even when nothing else looks wrong.
+  2. Otherwise, if Perplexity's response indicates a genuine concern → **`medium`**.
+  3. Otherwise (no concern, and not overnight) → **`low`**.
+  A missing/failed Perplexity response (e.g. `perplexity_enabled=0`, no `perplexity_ask`
+  configured, or an API failure) and not-overnight is never silently treated as `low` - there must
+  be positive evidence (a real `concern` verdict, or the overnight override) before urgency is
+  touched at all. New toggle: `param.urgency_override_enabled` (default `1`) to disable entirely.
+  Note: `urgency` (used here) is the ES notable field this endpoint can actually write - there is
+  no separate writable per-notable "severity" field; severity is a static correlation-search-level
+  property. [How urgency is assigned to notable events](https://help.splunk.com/en/splunk-enterprise-security-7/user-guide/7.3/incident-review/how-urgency-is-assigned-to-notable-events-in-splunk-enterprise-security),
+  [Notable Event API reference](https://help.splunk.com/en/splunk-enterprise-security-7/api-reference/7.2/notable-event-endpoints/notable-event-api-reference).
+- **Added: structured `concern` boolean field** to the Perplexity response schema (alongside the
+  existing free-text `overall` field), so the urgency decision above is driven by an explicit
+  true/false model signal rather than keyword-parsing the `overall` narrative. Surfaced in the
+  notable's write-back comment as a new `Concern flagged: Yes/No` line.
+- **Added: `urgency_set` field** to the shared `notable_agentic_enrichment` KV store collection
+  (`default/collections.conf`, `default/transforms.conf`'s `fields_list`, and the
+  `notable_agentic_enrichment_drilldown` dashboard's table columns), recording whatever urgency
+  value (if any) was written back for that row. Always blank on `notable_to_slack_json`'s own
+  records, since that action never touches urgency.
+- Version bumped **1.4.7 → 1.4.8** (increment only, per this project's versioning convention -
+  new feature, no `major.minor` change).
 
 ### 1.4.7
 

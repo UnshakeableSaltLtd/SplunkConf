@@ -31,6 +31,7 @@ file/APP_NAME - not a shared/ambiguous "ta_common" logger.
 --------------------------------------------------------------------
 """
 import csv
+import datetime
 import gzip
 import json
 import logging
@@ -398,6 +399,11 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
     }
     schema["properties"]["overall"] = {"type": "string"}
     schema["required"].append("overall")
+    # v1.4.8: structured boolean signal for automated urgency-setting (see
+    # compute_notable_urgency() below), so that decision doesn't depend on
+    # fragile keyword-parsing of the free-text 'overall' narrative above.
+    schema["properties"]["concern"] = {"type": "boolean"}
+    schema["required"].append("concern")
 
     # instructions = the standing system prompt (applied every turn); input_text =
     # the specific question/task for this call. See
@@ -408,7 +414,11 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
         "context and, where useful, current public information (e.g. known malicious IP ranges, "
         "well-known Tor exit nodes, common repository/service reputations). Then add one 'overall' "
         "field with a short risk read-out synthesizing all the answers - call out anything atypical "
-        "or worth a human follow-up. Answer strictly as JSON matching the given schema."
+        "or worth a human follow-up. Also add a 'concern' boolean field: true if ANY answer surfaces "
+        "something a human analyst should actually review (e.g. an unexpected repository, an "
+        "unconfirmed/unauthorized user, a suspicious or unverified source IP); false if every check "
+        "came back clean/expected with nothing worth escalating. Answer strictly as JSON matching "
+        "the given schema."
     )
     input_text = (
         f"Notable context (already extracted from the finding):\n{json.dumps(context_fields, default=str)}\n\n"
@@ -518,7 +528,10 @@ def format_perplexity_comment(sent_at, additional_fields):
         lines.append("")
         lines.append(f"Overall: {overall}")
 
-    check_keys = list(ask.keys()) or [k for k in response.keys() if k != "overall"]
+    if "concern" in response:
+        lines.append(f"Concern flagged: {'Yes' if response.get('concern') else 'No'}")
+
+    check_keys = list(ask.keys()) or [k for k in response.keys() if k not in ("overall", "concern")]
     if check_keys:
         lines.append("")
         lines.append("Checks:")
@@ -552,22 +565,111 @@ def format_perplexity_comment(sent_at, additional_fields):
 # just a status flag). Only comment/status/urgency/newOwner/disposition
 # are writable via this endpoint - no arbitrary new fields.
 # https://help.splunk.com/en/splunk-enterprise-security-7/api-reference/7.2/notable-event-endpoints/notable-event-api-reference
+#
+# v1.4.8: generalised from the original post_comment_to_notable(), which only
+# ever wrote "comment", to also (optionally, in the SAME POST) write
+# "urgency" - see compute_notable_urgency() below for how that value is
+# decided. Both comment= and urgency= are optional but at least one must be
+# given; either can be set independently so callers can update urgency
+# without touching the comment (or vice versa) without a second round trip.
 # ----------------------------------------------------------------------
-def post_comment_to_notable(server_uri, session_key, event_id, comment, log):
+def update_notable(server_uri, session_key, event_id, log, comment=None, urgency=None):
     if not server_uri or not session_key:
         raise RuntimeError("server_uri/session_key unavailable; cannot call notable_update")
+    if comment is None and urgency is None:
+        raise ValueError("update_notable requires at least one of comment= or urgency=")
+    fields = {"ruleUIDs": event_id}
+    if comment is not None:
+        fields["comment"] = comment
+    if urgency is not None:
+        fields["urgency"] = urgency
     url = f"{server_uri}/services/notable_update"
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    body = urllib.parse.urlencode({"ruleUIDs": event_id, "comment": comment}).encode("utf-8")
+    body = urllib.parse.urlencode(fields).encode("utf-8")
     req = urllib.request.Request(
         url, data=body, method="POST", headers={"Authorization": f"Splunk {session_key}"}
     )
     with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
         result = json.loads(resp.read().decode("utf-8"))
-    log.info("Wrote comment back to notable event_id=%s: %s", event_id, result)
+    log.info(
+        "Wrote notable_update event_id=%s (comment=%s, urgency=%s): %s",
+        event_id, comment is not None, urgency, result,
+    )
     return result
+
+
+# ----------------------------------------------------------------------
+# Parse a "HH:MM" config value (24h, UTC) into a datetime.time, falling back
+# to the given default - and logging a warning - on anything unparseable.
+# Used for the configurable overnight-urgency-override window bounds
+# (param.overnight_start / param.overnight_end) below.
+# ----------------------------------------------------------------------
+def parse_hhmm(value, default_hour, default_minute, log, label):
+    value = (value or "").strip()
+    if not value:
+        return datetime.time(default_hour, default_minute)
+    try:
+        hh, mm = value.split(":", 1)
+        return datetime.time(int(hh), int(mm))
+    except Exception:
+        log.warning(
+            "Could not parse %s=%r as HH:MM; falling back to %02d:%02d",
+            label, value, default_hour, default_minute,
+        )
+        return datetime.time(default_hour, default_minute)
+
+
+# ----------------------------------------------------------------------
+# True if event_time (epoch seconds - Splunk's native _time representation,
+# UTC) falls within [overnight_start, overnight_end) UTC. Returns False (not
+# an error) for anything unparseable/missing, since the caller treats "not
+# overnight" as the safe default rather than crashing the action over a
+# malformed/absent timestamp.
+#
+# NOTE: assumes overnight_start < overnight_end (does not support a window
+# that wraps past midnight, e.g. 22:00-04:00). The default 00:30-06:00
+# window doesn't need that; revisit this if a future window ever needs to
+# cross midnight.
+# ----------------------------------------------------------------------
+def _push_time_is_overnight(event_time, overnight_start, overnight_end):
+    if event_time in (None, ""):
+        return False
+    try:
+        ts = float(event_time)
+    except (TypeError, ValueError):
+        return False
+    event_clock = datetime.datetime.utcfromtimestamp(ts).time()
+    return overnight_start <= event_clock < overnight_end
+
+
+# ----------------------------------------------------------------------
+# Decide what urgency (if any) should be written back to the notable,
+# combining Perplexity's own structured "concern" verdict with a fixed
+# overnight-push override. Priority order (highest wins):
+#   1. event_time falls inside the overnight window (UTC) -> "high",
+#      regardless of what Perplexity concluded - out-of-hours activity is
+#      treated as inherently suspicious even when nothing else looks wrong,
+#      so it always gets escalated for a human look.
+#   2. perplexity_response["concern"] is True -> "medium".
+#   3. Otherwise (perplexity_response present with concern=False, and not
+#      overnight) -> "low".
+# Returns None when there is no basis for a decision at all (no usable
+# perplexity_response and not overnight) - e.g. perplexity_enabled=0, no
+# perplexity_ask configured, or the API call failed - so a missing/failed
+# response is never silently mistaken for "nothing to worry about".
+#
+# Valid urgency values per the notable_update endpoint: informational, low,
+# medium, high, critical (lowercase).
+# https://help.splunk.com/en/splunk-enterprise-security-7/user-guide/7.3/incident-review/how-urgency-is-assigned-to-notable-events-in-splunk-enterprise-security
+# ----------------------------------------------------------------------
+def compute_notable_urgency(perplexity_response, event_time, overnight_start, overnight_end):
+    if _push_time_is_overnight(event_time, overnight_start, overnight_end):
+        return "high"
+    if isinstance(perplexity_response, dict) and "concern" in perplexity_response:
+        return "medium" if perplexity_response.get("concern") else "low"
+    return None
 
 
 # ----------------------------------------------------------------------

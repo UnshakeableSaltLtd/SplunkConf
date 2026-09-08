@@ -283,6 +283,10 @@ def main():
                             ),
                             "status": "success",
                             "error": "",
+                            # v1.4.8: only notable_to_perplexity_json.py ever sets this
+                            # (this action never touches urgency) - kept present-but-blank
+                            # here so the column is consistent across both actions' records.
+                            "urgency_set": "",
                         },
                         log,
                     )
@@ -331,6 +335,7 @@ def main():
                             ),
                             "status": "failure",
                             "error": str(sys.exc_info()[1]),
+                            "urgency_set": "",
                         },
                         log,
                     )

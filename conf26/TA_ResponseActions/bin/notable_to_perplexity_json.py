@@ -106,6 +106,16 @@ def main():
     write_back_kvstore = (cfg.get("write_back_kvstore", "1")) in ("1", "true", "True")
     perplexity_enabled = (cfg.get("perplexity_enabled", "1")) in ("1", "true", "True")
     test_connectivity = (cfg.get("test_connectivity", "0")) in ("1", "true", "True")
+    # v1.4.8: automatic urgency write-back (see ta_common.compute_notable_urgency
+    # for the full priority-order rules) - independent of write_back_comment so it
+    # can be toggled/tuned on its own.
+    urgency_override_enabled = (cfg.get("urgency_override_enabled", "1")) in ("1", "true", "True")
+    overnight_start = ta_common.parse_hhmm(
+        cfg.get("overnight_start"), 0, 30, log, "param.overnight_start"
+    )
+    overnight_end = ta_common.parse_hhmm(
+        cfg.get("overnight_end"), 6, 0, log, "param.overnight_end"
+    )
     # NOTE: deliberately NOT derived from payload.get("app") - that key holds
     # the app context of the TRIGGERING saved search (e.g. "TA_AllIndexCreation",
     # "SplunkEnterpriseSecuritySuite"), which varies per correlation search and
@@ -214,6 +224,18 @@ def main():
             except Exception:
                 log.exception("Unexpected error answering perplexity_ask for row=%d", i)
 
+        # v1.4.8: decide whether to escalate/de-escalate the notable's own
+        # urgency (see ta_common.compute_notable_urgency docstring for the
+        # exact priority order). Uses the RAW row's _time - not
+        # envelope["notable"] - because _time is stripped out of that dict by
+        # param.field_denylist by default (see ta_common.format_event_time for
+        # the same raw-row fallback pattern).
+        urgency_to_set = None
+        if urgency_override_enabled:
+            urgency_to_set = ta_common.compute_notable_urgency(
+                response, row.get("_time"), overnight_start, overnight_end
+            )
+
         # Success = either there was nothing to ask, asking is disabled, or
         # we got a response back. A configured-but-unanswered ask (bad/missing
         # key, API failure - already logged distinctly inside
@@ -251,31 +273,36 @@ def main():
         # 2) Persisted comment on the SAME notable's own Activity trail, so
         #    the perplexity_ask/perplexity_response pair is visible with the
         #    rest of the notable in the analyst's Incident Review queue.
-        if write_back_comment:
+        if write_back_comment or urgency_to_set:
             event_id = row.get("event_id")
             if event_id:
                 try:
-                    ta_common.post_comment_to_notable(
+                    ta_common.update_notable(
                         payload.get("server_uri"),
                         payload.get("session_key"),
                         event_id,
+                        log,
                         # Human-readable narrative, not a single-line JSON
                         # blob - Incident Review/Mission Control renders
                         # this comment as plain text, so json.dumps() here
                         # used to show up to the analyst as raw JSON.
-                        ta_common.format_perplexity_comment(
-                            envelope.get("sent_at"), envelope.get("additional_fields")
+                        comment=(
+                            ta_common.format_perplexity_comment(
+                                envelope.get("sent_at"), envelope.get("additional_fields")
+                            )
+                            if write_back_comment
+                            else None
                         ),
-                        log,
+                        urgency=urgency_to_set,
                     )
                 except Exception:
                     log.exception(
-                        "Failed to write comment back to notable event_id=%s", event_id
+                        "Failed to write comment/urgency back to notable event_id=%s", event_id
                     )
             else:
                 log.debug(
                     "No event_id on row=%d (not a notable-context invocation); "
-                    "skipping notable comment write-back",
+                    "skipping notable comment/urgency write-back",
                     i,
                 )
 
@@ -305,6 +332,7 @@ def main():
                         ),
                         "status": "success" if success else "failure",
                         "error": error_detail,
+                        "urgency_set": urgency_to_set or "",
                     },
                     log,
                 )
