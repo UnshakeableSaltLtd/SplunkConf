@@ -96,7 +96,11 @@ def main():
     write_back_comment = (cfg.get("write_back_comment", "1")) in ("1", "true", "True")
     write_back_kvstore = (cfg.get("write_back_kvstore", "1")) in ("1", "true", "True")
     test_connectivity = (cfg.get("test_connectivity", "0")) in ("1", "true", "True")
-    kvstore_app = payload.get("app", "TA_ResponseActions") or "TA_ResponseActions"
+    # NOTE: deliberately NOT derived from payload.get("app") - see the matching
+    # comment in notable_to_perplexity_json.py. The notable_agentic_enrichment
+    # collection lives only in TA_ResponseActions, never in the triggering
+    # search's own app, so hardcoding this avoids a 404 on write-back.
+    kvstore_app = "TA_ResponseActions"
 
     # Unconditional heartbeat: every single invocation of this script leaves
     # this log line no matter what happens next (bad payload, no rows, an
