@@ -116,6 +116,10 @@ def main():
     overnight_end = ta_common.parse_hhmm(
         cfg.get("overnight_end"), 6, 0, log, "param.overnight_end"
     )
+    # v1.4.10: urgency to set when Perplexity flags concern=True (and the event
+    # isn't in the overnight window) - configurable rather than hardcoded, same
+    # reasoning as param.hard_escalation_urgency below.
+    concern_urgency = (cfg.get("concern_urgency") or "high").strip()
     # NOTE: deliberately NOT derived from payload.get("app") - that key holds
     # the app context of the TRIGGERING saved search (e.g. "TA_AllIndexCreation",
     # "SplunkEnterpriseSecuritySuite"), which varies per correlation search and
@@ -249,7 +253,8 @@ def main():
         urgency_to_set = None
         if urgency_override_enabled:
             urgency_to_set = ta_common.compute_notable_urgency(
-                response, row.get("_time"), overnight_start, overnight_end
+                response, row.get("_time"), overnight_start, overnight_end,
+                concern_urgency=concern_urgency,
             )
             # v1.4.9: a hard_escalation verified fact (confirmed-nonexistent repo,
             # AbuseIPDB score over threshold) always wins over the overnight-window

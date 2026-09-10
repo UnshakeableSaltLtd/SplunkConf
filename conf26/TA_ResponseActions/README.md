@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.9
+**Version:** 1.4.10
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -320,6 +320,18 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.10
+
+- **Changed: urgency set when Perplexity's `concern` field is true.** Previously hardcoded to
+  `medium` (since 1.4.8) - a model-flagged concern on this kind of detection warrants an analyst
+  look as soon as it surfaces, not a lower-tier queue position, so the default is now `high`.
+  Now configurable via new param **`param.concern_urgency`** (default `high`) instead of being a
+  hardcoded value in `ta_common.compute_notable_urgency()`, matching the same
+  configurable-not-hardcoded pattern already used for `param.hard_escalation_urgency` (1.4.9).
+  Still only applies when the notable is not already in the overnight window (which stays
+  `high` regardless) and is still gated by `param.urgency_override_enabled`.
+- Version bumped **1.4.9 → 1.4.10** (increment only, per this project's versioning convention).
 
 ### 1.4.9
 

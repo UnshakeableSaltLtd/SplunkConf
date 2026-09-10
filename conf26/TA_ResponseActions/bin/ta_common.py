@@ -966,7 +966,11 @@ def _push_time_is_overnight(event_time, overnight_start, overnight_end):
 #      regardless of what Perplexity concluded - out-of-hours activity is
 #      treated as inherently suspicious even when nothing else looks wrong,
 #      so it always gets escalated for a human look.
-#   2. perplexity_response["concern"] is True -> "medium".
+#   2. perplexity_response["concern"] is True -> concern_urgency (v1.4.10:
+#      configurable via param.concern_urgency, default "high" - an LLM-
+#      flagged concern on this kind of detection warrants an analyst look
+#      as soon as it surfaces, not a lower-tier queue position; previously
+#      hardcoded to "medium" in 1.4.8/1.4.9).
 #   3. Otherwise (perplexity_response present with concern=False, and not
 #      overnight) -> "low".
 # Returns None when there is no basis for a decision at all (no usable
@@ -978,11 +982,13 @@ def _push_time_is_overnight(event_time, overnight_start, overnight_end):
 # medium, high, critical (lowercase).
 # https://help.splunk.com/en/splunk-enterprise-security-7/user-guide/7.3/incident-review/how-urgency-is-assigned-to-notable-events-in-splunk-enterprise-security
 # ----------------------------------------------------------------------
-def compute_notable_urgency(perplexity_response, event_time, overnight_start, overnight_end):
+def compute_notable_urgency(
+    perplexity_response, event_time, overnight_start, overnight_end, concern_urgency="high"
+):
     if _push_time_is_overnight(event_time, overnight_start, overnight_end):
         return "high"
     if isinstance(perplexity_response, dict) and "concern" in perplexity_response:
-        return "medium" if perplexity_response.get("concern") else "low"
+        return concern_urgency if perplexity_response.get("concern") else "low"
     return None
 
 
