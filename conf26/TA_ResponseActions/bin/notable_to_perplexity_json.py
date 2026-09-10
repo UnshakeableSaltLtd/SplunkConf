@@ -207,6 +207,21 @@ def main():
         # param.additional_fields template), answer it synchronously via the
         # Perplexity API and merge the result in as "perplexity_response".
         ask = (envelope.get("additional_fields") or {}).get("perplexity_ask")
+
+        # v1.4.9: deterministic GitHub-existence / AbuseIPDB-reputation checks, run
+        # against the RAW row (same _time-bearing dict fields come from, before
+        # field_denylist strips things for the envelope) BEFORE the Perplexity call,
+        # so their verified results can be injected into the prompt as ground truth
+        # and used to force-escalate urgency independent of the LLM's own narrative.
+        deterministic_checks = None
+        try:
+            deterministic_checks = ta_common.run_deterministic_checks(
+                row, cfg, payload.get("server_uri"), payload.get("session_key"),
+                payload.get("app", "search"), log,
+            )
+        except Exception:
+            log.exception("Unexpected error running deterministic checks for row=%d", i)
+
         response = None
         if perplexity_enabled and ask:
             try:
@@ -218,6 +233,7 @@ def main():
                     payload.get("session_key"),
                     payload.get("app", "search"),
                     log,
+                    deterministic_checks=deterministic_checks,
                 )
                 if response is not None:
                     envelope["additional_fields"]["perplexity_response"] = response
@@ -235,6 +251,19 @@ def main():
             urgency_to_set = ta_common.compute_notable_urgency(
                 response, row.get("_time"), overnight_start, overnight_end
             )
+            # v1.4.9: a hard_escalation verified fact (confirmed-nonexistent repo,
+            # AbuseIPDB score over threshold) always wins over the overnight-window
+            # and concern-based logic above - it's a confirmed signal on THIS specific
+            # notable, not a blanket time-based policy, and can't be talked out of
+            # firing by prompt injection the way the LLM's own concern/overall text
+            # could be. Still gated by the same urgency_override_enabled master
+            # switch as everything else in this block.
+            if deterministic_checks and deterministic_checks.get("hard_escalation"):
+                urgency_to_set = (cfg.get("hard_escalation_urgency") or "critical").strip()
+                log.warning(
+                    "HARD ESCALATION for row=%d: forcing urgency=%s (reasons=%s)",
+                    i, urgency_to_set, deterministic_checks.get("hard_escalation_reasons"),
+                )
 
         # Success = either there was nothing to ask, asking is disabled, or
         # we got a response back. A configured-but-unanswered ask (bad/missing
@@ -288,7 +317,8 @@ def main():
                         # used to show up to the analyst as raw JSON.
                         comment=(
                             ta_common.format_perplexity_comment(
-                                envelope.get("sent_at"), envelope.get("additional_fields")
+                                envelope.get("sent_at"), envelope.get("additional_fields"),
+                                deterministic_checks=deterministic_checks,
                             )
                             if write_back_comment
                             else None
@@ -333,6 +363,12 @@ def main():
                         "status": "success" if success else "failure",
                         "error": error_detail,
                         "urgency_set": urgency_to_set or "",
+                        "hard_escalation": bool(
+                            deterministic_checks and deterministic_checks.get("hard_escalation")
+                        ),
+                        "hard_escalation_reasons": "; ".join(
+                            (deterministic_checks or {}).get("hard_escalation_reasons") or []
+                        ),
                     },
                     log,
                 )

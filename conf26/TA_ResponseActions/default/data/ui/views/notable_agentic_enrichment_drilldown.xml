@@ -17,7 +17,7 @@
       <table>
         <search>
           <query>| inputlookup notable_agentic_enrichment_lookup where sid="$sid$" AND rid="$rid$"
-| table event_id sent_at delivery_method slack_channel slack_permalink urgency_set status error additional_fields
+| table event_id sent_at delivery_method slack_channel slack_permalink urgency_set hard_escalation hard_escalation_reasons status error additional_fields
 | sort - sent_at</query>
           <earliest>0</earliest>
           <latest></latest>

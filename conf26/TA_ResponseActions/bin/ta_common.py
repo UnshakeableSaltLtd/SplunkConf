@@ -376,7 +376,296 @@ def call_perplexity_api(api_key, input_text, instructions=None, model=None, pres
         raise PerplexityApiError(e.code, body_text) from e
 
 
-def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, session_key, app, log):
+# ----------------------------------------------------------------------
+# GitHub repo existence check (deterministic ground truth, NOT LLM-judged) -
+# added in 1.4.9 after a prompt-injection test showed a fabricated repo name
+# only got a hedged "no reliable public result" answer instead of a hard
+# "this does not exist". The Agent API's own web search has no privileged
+# view of the org's real repo inventory and, more fundamentally, can't
+# reliably prove a NEGATIVE ("this repo doesn't exist") from open web search
+# absence alone. This calls the GitHub REST API directly so existence is a
+# verified fact, not a guess, before it's ever handed to the LLM as context.
+# https://docs.github.com/en/rest/repos/repos#get-a-repository
+# ----------------------------------------------------------------------
+GITHUB_API_URL = "https://api.github.com"
+
+
+def resolve_github_token(cfg, server_uri, session_key, app, log):
+    token = (cfg.get("github_token") or "").strip()
+    if token:
+        return token, "plaintext (param.github_token)"
+    realm = (cfg.get("github_token_realm") or "").strip()
+    if not realm:
+        return "", "not configured (no github_token or github_token_realm)"
+    try:
+        token = get_secret_from_vault(server_uri, session_key, realm, app) or ""
+    except Exception:
+        log.exception(
+            "GITHUB CREDENTIAL LOOKUP FAILURE: could not read realm=%s from storage/passwords "
+            "(vault unreachable, bad realm name, or insufficient permissions on the running "
+            "user context) - this is NOT the same as an invalid token, check connectivity to "
+            "server_uri first",
+            realm,
+        )
+        return "", f"vault lookup failed for realm={realm}"
+    if not token:
+        log.warning(
+            "GITHUB CREDENTIAL LOOKUP FAILURE: realm=%s has no stored password (empty result, "
+            "not a lookup error) - nothing was ever saved under this realm",
+            realm,
+        )
+        return "", f"vault realm={realm} (empty)"
+    return token, f"vault realm={realm}"
+
+
+def check_github_repo_exists(token, repo_full_name, log, timeout=10):
+    """repo_full_name must be 'owner/repo'. Returns a dict that is always JSON-
+    serialisable ground truth and never raises - any transport/auth failure is
+    captured in the dict itself (checked=False) rather than silently skipping
+    the check or crashing the caller. exists is True/False/None (None = could
+    not be determined, e.g. credential failure - NOT the same as 'exists=False')."""
+    result = {"repo": repo_full_name, "checked": False, "exists": None, "detail": ""}
+    if not repo_full_name or "/" not in repo_full_name:
+        result["detail"] = f"not a valid owner/repo string: {repo_full_name!r}"
+        return result
+    url = f"{GITHUB_API_URL}/repos/{repo_full_name}"
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        result.update(
+            checked=True,
+            exists=True,
+            detail=(
+                f"found (private={data.get('private')}, "
+                f"default_branch={data.get('default_branch')}, created_at={data.get('created_at')})"
+            ),
+        )
+        log.info("GITHUB CHECK OK: repo=%s exists=True", repo_full_name)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            result.update(
+                checked=True,
+                exists=False,
+                detail="HTTP 404 - repository not found (does not exist under this owner, "
+                "or is private and not visible to the configured token)",
+            )
+            log.warning("GITHUB CHECK: repo=%s does NOT exist (HTTP 404)", repo_full_name)
+        elif e.code in (401, 403):
+            body_text = e.read().decode("utf-8", errors="replace")
+            result["detail"] = f"HTTP {e.code} (credential problem, NOT a repo-existence answer): {body_text}"
+            log.error(
+                "GITHUB CHECK CREDENTIAL FAILURE: HTTP %s checking repo=%s: %s",
+                e.code, repo_full_name, body_text,
+            )
+        else:
+            body_text = e.read().decode("utf-8", errors="replace")
+            result["detail"] = f"HTTP {e.code}: {body_text}"
+            log.error("GITHUB CHECK FAILURE: HTTP %s checking repo=%s: %s", e.code, repo_full_name, body_text)
+    except Exception as e:
+        result["detail"] = f"network/timeout error: {e}"
+        log.exception("GITHUB CHECK FAILURE: network/timeout error checking repo=%s", repo_full_name)
+    return result
+
+
+def check_github_connectivity(cfg, server_uri, session_key, app, log):
+    """Returns (ok, detail): ok is True/False/None (None = not configured)."""
+    token, source = resolve_github_token(cfg, server_uri, session_key, app, log)
+    if not token:
+        log.warning("GITHUB AUTH SKIPPED: %s", source)
+        return None, source
+    req = urllib.request.Request(
+        f"{GITHUB_API_URL}/rate_limit",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode("utf-8", errors="replace")
+        log.error(
+            "GITHUB AUTH FAILURE: HTTP %s calling /rate_limit (token source=%s): %s",
+            e.code, source, body_text,
+        )
+        return False, f"HTTP {e.code}: {body_text}"
+    except Exception as e:
+        log.exception("GITHUB AUTH FAILURE: network/timeout error calling /rate_limit (token source=%s)", source)
+        return False, str(e)
+    log.info(
+        "GITHUB AUTH OK: rate_limit remaining=%s (token source=%s)",
+        data.get("rate", {}).get("remaining"), source,
+    )
+    return True, data
+
+
+# ----------------------------------------------------------------------
+# AbuseIPDB reputation check (deterministic ground truth) - same rationale
+# as the GitHub check above: an LLM's web search may or may not surface a
+# public AbuseIPDB report page for a given IP, and even if it does, can't
+# return a real confidence score from that - this calls the actual API.
+# https://docs.abuseipdb.com/#check-endpoint
+# ----------------------------------------------------------------------
+ABUSEIPDB_API_URL = "https://api.abuseipdb.com/api/v2/check"
+
+
+def resolve_abuseipdb_api_key(cfg, server_uri, session_key, app, log):
+    api_key = (cfg.get("abuseipdb_api_key") or "").strip()
+    if api_key:
+        return api_key, "plaintext (param.abuseipdb_api_key)"
+    realm = (cfg.get("abuseipdb_api_key_realm") or "").strip()
+    if not realm:
+        return "", "not configured (no abuseipdb_api_key or abuseipdb_api_key_realm)"
+    try:
+        api_key = get_secret_from_vault(server_uri, session_key, realm, app) or ""
+    except Exception:
+        log.exception(
+            "ABUSEIPDB CREDENTIAL LOOKUP FAILURE: could not read realm=%s from storage/passwords "
+            "(vault unreachable, bad realm name, or insufficient permissions on the running user "
+            "context) - this is NOT the same as an invalid key, check connectivity to server_uri "
+            "first",
+            realm,
+        )
+        return "", f"vault lookup failed for realm={realm}"
+    if not api_key:
+        log.warning(
+            "ABUSEIPDB CREDENTIAL LOOKUP FAILURE: realm=%s has no stored password (empty "
+            "result, not a lookup error) - nothing was ever saved under this realm",
+            realm,
+        )
+        return "", f"vault realm={realm} (empty)"
+    return api_key, f"vault realm={realm}"
+
+
+def check_ip_reputation(api_key, ip_address, log, max_age_days=90, timeout=10):
+    """Returns a dict that is always JSON-serialisable ground truth and never
+    raises - any transport/auth failure is captured in the dict itself
+    (checked=False) rather than silently skipping the check."""
+    result = {"ip": ip_address, "checked": False, "abuse_confidence_score": None, "detail": ""}
+    if not ip_address:
+        result["detail"] = "no IP address provided"
+        return result
+    url = f"{ABUSEIPDB_API_URL}?{urllib.parse.urlencode({'ipAddress': ip_address, 'maxAgeInDays': max_age_days})}"
+    req = urllib.request.Request(url, headers={"Key": api_key, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+        data = body.get("data", {})
+        result.update(
+            checked=True,
+            abuse_confidence_score=data.get("abuseConfidenceScore"),
+            total_reports=data.get("totalReports"),
+            country_code=data.get("countryCode"),
+            isp=data.get("isp"),
+            is_tor=data.get("isTor"),
+            detail=f"abuseConfidenceScore={data.get('abuseConfidenceScore')} totalReports={data.get('totalReports')}",
+        )
+        log.info(
+            "ABUSEIPDB CHECK OK: ip=%s abuse_confidence_score=%s",
+            ip_address, data.get("abuseConfidenceScore"),
+        )
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode("utf-8", errors="replace")
+        if e.code in (401, 403):
+            result["detail"] = f"HTTP {e.code} (credential problem, NOT a reputation answer): {body_text}"
+            log.error(
+                "ABUSEIPDB CHECK CREDENTIAL FAILURE: HTTP %s checking ip=%s: %s",
+                e.code, ip_address, body_text,
+            )
+        else:
+            result["detail"] = f"HTTP {e.code}: {body_text}"
+            log.error("ABUSEIPDB CHECK FAILURE: HTTP %s checking ip=%s: %s", e.code, ip_address, body_text)
+    except Exception as e:
+        result["detail"] = f"network/timeout error: {e}"
+        log.exception("ABUSEIPDB CHECK FAILURE: network/timeout error checking ip=%s", ip_address)
+    return result
+
+
+def check_abuseipdb_connectivity(cfg, server_uri, session_key, app, log):
+    """Returns (ok, detail): ok is True/False/None (None = not configured)."""
+    api_key, source = resolve_abuseipdb_api_key(cfg, server_uri, session_key, app, log)
+    if not api_key:
+        log.warning("ABUSEIPDB AUTH SKIPPED: %s", source)
+        return None, source
+    # 8.8.8.8 is a stable, always-safe public IP used purely to prove the key
+    # works - not a signal about this deployment's actual traffic.
+    check = check_ip_reputation(api_key, "8.8.8.8", log)
+    if not check["checked"]:
+        log.error("ABUSEIPDB AUTH FAILURE: %s (key source=%s)", check["detail"], source)
+        return False, check["detail"]
+    log.info("ABUSEIPDB AUTH OK: test call against 8.8.8.8 succeeded (key source=%s)", source)
+    return True, check
+
+
+# ----------------------------------------------------------------------
+# Orchestrates BOTH deterministic checks above for a single notable row -
+# these run BEFORE the Perplexity call and their results are injected into
+# get_perplexity_response() as verified ground truth: the LLM is told these
+# facts are already confirmed and must synthesize around them, not re-derive
+# or contradict them. Also computes a hard_escalation flag straight from the
+# verified facts, with no LLM judgement involved - e.g. a nonexistent repo or
+# a high AbuseIPDB score escalates regardless of what any narrative text
+# says, so this can't be talked out of firing by a well-worded injection the
+# way a pure prompt answer could be. See notable_to_perplexity_json.py for
+# how hard_escalation is reconciled with the 1.4.8 overnight/concern urgency
+# logic (compute_notable_urgency) - hard_escalation takes priority over both.
+# ----------------------------------------------------------------------
+def run_deterministic_checks(row, cfg, server_uri, session_key, app, log):
+    checks = {}
+    reasons = []
+
+    github_enabled = (cfg.get("github_check_enabled", "1")) in ("1", "true", "True")
+    repo_field = (cfg.get("github_repo_field") or "repo").strip()
+    repo_value = (row.get(repo_field) or "").strip()
+    if github_enabled and repo_value:
+        token, token_source = resolve_github_token(cfg, server_uri, session_key, app, log)
+        if token:
+            gh = check_github_repo_exists(token, repo_value, log)
+            checks["github_repo_check"] = gh
+            if gh["checked"] and gh["exists"] is False:
+                reasons.append(
+                    f"repository '{repo_value}' does not exist (verified via GitHub API, HTTP 404)"
+                )
+        else:
+            log.warning("GITHUB CHECK SKIPPED for repo=%s: %s", repo_value, token_source)
+            checks["github_repo_check"] = {
+                "repo": repo_value, "checked": False, "exists": None, "detail": token_source,
+            }
+
+    abuseipdb_enabled = (cfg.get("abuseipdb_check_enabled", "1")) in ("1", "true", "True")
+    ip_field = (cfg.get("source_ip_field") or "src").strip()
+    ip_value = (row.get(ip_field) or "").strip()
+    if abuseipdb_enabled and ip_value:
+        api_key, key_source = resolve_abuseipdb_api_key(cfg, server_uri, session_key, app, log)
+        if api_key:
+            try:
+                threshold = int(cfg.get("abuseipdb_escalation_threshold") or 50)
+            except ValueError:
+                threshold = 50
+            ipcheck = check_ip_reputation(api_key, ip_value, log)
+            checks["ip_reputation_check"] = ipcheck
+            score = ipcheck.get("abuse_confidence_score")
+            if ipcheck["checked"] and isinstance(score, (int, float)) and score >= threshold:
+                reasons.append(
+                    f"source IP '{ip_value}' has an AbuseIPDB confidence score of {score} "
+                    f"(>= configured threshold {threshold})"
+                )
+        else:
+            log.warning("ABUSEIPDB CHECK SKIPPED for ip=%s: %s", ip_value, key_source)
+            checks["ip_reputation_check"] = {
+                "ip": ip_value, "checked": False, "abuse_confidence_score": None, "detail": key_source,
+            }
+
+    checks["hard_escalation"] = bool(reasons)
+    checks["hard_escalation_reasons"] = reasons
+    return checks
+
+
+def get_perplexity_response(
+    perplexity_ask, context_fields, cfg, server_uri, session_key, app, log, deterministic_checks=None
+):
     if not isinstance(perplexity_ask, dict) or not perplexity_ask:
         return None
 
@@ -412,17 +701,34 @@ def get_perplexity_response(perplexity_ask, context_fields, cfg, server_uri, ses
         "You are a SOC triage assistant reviewing a single Splunk Enterprise Security notable. "
         "For each question below, give a concise 1-3 sentence answer grounded in the provided "
         "context and, where useful, current public information (e.g. known malicious IP ranges, "
-        "well-known Tor exit nodes, common repository/service reputations). Then add one 'overall' "
-        "field with a short risk read-out synthesizing all the answers - call out anything atypical "
-        "or worth a human follow-up. Also add a 'concern' boolean field: true if ANY answer surfaces "
-        "something a human analyst should actually review (e.g. an unexpected repository, an "
-        "unconfirmed/unauthorized user, a suspicious or unverified source IP); false if every check "
-        "came back clean/expected with nothing worth escalating. Answer strictly as JSON matching "
-        "the given schema."
+        "well-known Tor exit nodes, common repository/service reputations). "
+        + (
+            "Some facts below have already been VERIFIED PROGRAMMATICALLY (e.g. a live GitHub API "
+            "repo-existence check, a live AbuseIPDB reputation lookup) - these are ground truth, not "
+            "your own inference. Treat them as authoritative: do not contradict, soften, or hedge "
+            "against a verified fact just because your own web search doesn't independently "
+            "corroborate it - a verified 'does not exist' or a high abuse confidence score is "
+            "definitive on its own. Weight these heavily in your answers and in 'overall'. "
+            if deterministic_checks
+            else ""
+        )
+        + "Then add one 'overall' field with a short risk read-out synthesizing all the answers - call "
+        "out anything atypical or worth a human follow-up. Also add a 'concern' boolean field: true "
+        "if ANY answer surfaces something a human analyst should actually review (e.g. an unexpected "
+        "repository, an unconfirmed/unauthorized user, a suspicious or unverified source IP) - this "
+        "MUST be true if a verified fact below already indicates a problem; false if every check came "
+        "back clean/expected with nothing worth escalating. Answer strictly as JSON matching the "
+        "given schema."
     )
     input_text = (
         f"Notable context (already extracted from the finding):\n{json.dumps(context_fields, default=str)}\n\n"
-        f"Questions to answer:\n{json.dumps(perplexity_ask, default=str)}"
+        + (
+            f"Verified facts (already confirmed programmatically, NOT to be re-derived or "
+            f"contradicted):\n{json.dumps(deterministic_checks, default=str)}\n\n"
+            if deterministic_checks
+            else ""
+        )
+        + f"Questions to answer:\n{json.dumps(perplexity_ask, default=str)}"
     )
     response_format = {
         "type": "json_schema",
@@ -508,11 +814,19 @@ def _humanize_check_label(key):
     return " ".join(out)
 
 
-def format_perplexity_comment(sent_at, additional_fields):
+def format_perplexity_comment(sent_at, additional_fields, deterministic_checks=None):
     additional_fields = additional_fields or {}
     ask = additional_fields.get("perplexity_ask") or {}
     response = additional_fields.get("perplexity_response") or {}
     lines = [f"Perplexity ask/response processed at {sent_at}."]
+
+    # v1.4.9: a HARD ESCALATION banner, sourced purely from run_deterministic_checks()'
+    # verified facts (GitHub/AbuseIPDB), always goes first and is never dependent on
+    # what the LLM narrative below says - see hard_escalation_reasons.
+    if deterministic_checks and deterministic_checks.get("hard_escalation"):
+        lines.append("*** HARD ESCALATION (verified programmatically, not an LLM judgement) ***")
+        for reason in deterministic_checks.get("hard_escalation_reasons") or []:
+            lines.append(f"  - {reason}")
 
     if not isinstance(ask, dict) or not isinstance(response, dict) or (not ask and not response):
         # Nothing in the expected ask/response shape - fall back to an

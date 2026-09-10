@@ -287,6 +287,10 @@ def main():
                             # (this action never touches urgency) - kept present-but-blank
                             # here so the column is consistent across both actions' records.
                             "urgency_set": "",
+                            # v1.4.9: same reasoning - only notable_to_perplexity_json.py
+                            # runs the deterministic GitHub/AbuseIPDB checks.
+                            "hard_escalation": False,
+                            "hard_escalation_reasons": "",
                         },
                         log,
                     )
@@ -336,6 +340,8 @@ def main():
                             "status": "failure",
                             "error": str(sys.exc_info()[1]),
                             "urgency_set": "",
+                            "hard_escalation": False,
+                            "hard_escalation_reasons": "",
                         },
                         log,
                     )

@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.8
+**Version:** 1.4.9
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -265,6 +265,23 @@ Since 1.4.0 the app is visible in Splunk Web's app nav (`is_visible = 1`) with t
    ```
 
    Get a Perplexity key at [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api).
+
+   The two v1.4.9 deterministic-check credentials (GitHub token, AbuseIPDB key) have **no**
+   `setup.xml` GUI block by design — set them via `curl` only, same pattern, different realms:
+
+   ``` shell
+   curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
+     -u admin:<pass> -d name=perplexity_notable_action_github -d realm=perplexity_notable_action_github \
+     -d password=<github_fine_grained_token>
+
+   curl -k https://localhost:8089/servicesNS/nobody/TA_ResponseActions/storage/passwords \
+     -u admin:<pass> -d name=perplexity_notable_action_abuseipdb -d realm=perplexity_notable_action_abuseipdb \
+     -d password=<abuseipdb_api_key>
+   ```
+
+   Scope the GitHub token to read-only repository access (a fine-grained PAT's default
+   Metadata: Read-only permission is all `GET /repos/{owner}/{repo}` requires — no write scopes).
+   Get an AbuseIPDB key at [abuseipdb.com/account/api](https://www.abuseipdb.com/account/api).
 3. In ES, ensure this app is covered by **Configure > General > App Import** so ES recognizes it
    as an Adaptive Response provider.
 4. On a correlation search, **Add New Response Action** and add either or both:
@@ -303,6 +320,48 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.9
+
+- **Added: deterministic GitHub-existence and AbuseIPDB-reputation verification checks**, run
+  BEFORE the Perplexity call. An LLM's own web search can't reliably prove a negative ("this repo
+  doesn't exist") and easily hedges an absence of results into "no reliable public result" instead
+  of a hard "confirmed does not exist" - these two checks call the real GitHub and AbuseIPDB REST
+  APIs directly so existence/reputation are verified facts, not model inference.
+  - `ta_common.check_github_repo_exists()` — `GET /repos/{owner}/{repo}`; HTTP 404 is treated as a
+    confirmed non-existent repo, 401/403 is reported distinctly as a credential failure (never
+    conflated with "confirmed not to exist").
+  - `ta_common.check_ip_reputation()` — `GET /api/v2/check` against AbuseIPDB for the notable's
+    source IP, returning a real 0–100 abuse confidence score.
+  - `ta_common.run_deterministic_checks()` orchestrates both against the raw notable row and
+    produces a `hard_escalation` flag + `hard_escalation_reasons` list from the verified facts
+    alone — no LLM judgement involved, so it can't be talked out of firing by a well-worded prompt
+    injection.
+  - Verified facts are injected into the Perplexity Agent API call as ground truth the model is
+    instructed not to contradict or hedge against, and are weighted into the `overall`/`concern`
+    fields.
+  - `hard_escalation` **overrides** the 1.4.8 overnight-window/concern urgency logic
+    (`param.hard_escalation_urgency`, default `critical`) — a confirmed signal on this specific
+    notable wins over the blanket time-based policy. Still gated by
+    `param.urgency_override_enabled`.
+  - The write-back comment is prefixed with a `*** HARD ESCALATION ***` banner + reasons when
+    triggered (`ta_common.format_perplexity_comment()`).
+  - New KV store fields `hard_escalation` (bool) / `hard_escalation_reasons` (string) added to
+    `default/collections.conf`, `default/transforms.conf`'s `fields_list`, and the
+    `notable_agentic_enrichment_drilldown` dashboard's table columns. Always `false`/blank on
+    `notable_to_slack_json`'s own records, which never run these checks.
+  - New params: `param.github_check_enabled`, `param.github_repo_field`,
+    `param.github_token_realm`/`param.github_token`, `param.abuseipdb_check_enabled`,
+    `param.source_ip_field`, `param.abuseipdb_api_key_realm`/`param.abuseipdb_api_key`,
+    `param.abuseipdb_escalation_threshold`, `param.hard_escalation_urgency`. Credentials go in
+    `storage/passwords` under realms `perplexity_notable_action_github` /
+    `perplexity_notable_action_abuseipdb` — set via `curl` (see "Installation" below); deliberately
+    no `setup.xml` GUI block for these two.
+  - Known gap: `bin/test_harness.py` does not yet support `--override github_token=...` /
+    `--override abuseipdb_api_key=...`, so these two checks can't be dry-run standalone the way
+    the Slack/Perplexity credentials can - only live via a real notable or
+    `sendalert ... param.test_connectivity=1`.
+- Version bumped **1.4.8 → 1.4.9** (increment only, per this project's versioning convention).
 
 ### 1.4.8
 
