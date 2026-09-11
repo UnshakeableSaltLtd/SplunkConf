@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.15
+**Version:** 1.5.0
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -320,6 +320,29 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.5.0
+
+- **Milestone: the full automatic pipeline is confirmed working end-to-end** - a
+  correlation-search-triggered notable now gets its GitHub/AbuseIPDB/Perplexity checks run,
+  urgency correctly escalated, and the Perplexity reasoning written back into the correct
+  notable's comment/urgency fields in Mission Control / Incident Review, all without any manual
+  step. This closes out the write-back investigation that spanned 1.4.12-1.4.15:
+  - **1.4.12**: relaxed overly-restrictive ACLs blocking the modular action from running under
+    the scheduler's search context.
+  - **1.4.13**: raised the silent "no event_id, skipping write-back" skip from `debug` to
+    `warning` with a full row-field dump, to make an invisible failure visible.
+  - **1.4.13 (Deploy_to_Prod.yml)**: stopped wiping `local/` and `metadata/local.meta` on every
+    redeploy, which had been silently destroying saved vault credentials on every Ansible run.
+  - **1.4.14**: added `ta_common.resolve_notable_event_id()` - since automatic rows carry none of
+    the fields the original code expected (`orig_sid`/`orig_rid`/`event_id` are all absent from
+    the correlation search's own `table` output), resolve the sibling notable's identity via a
+    oneshot REST search against `index=notable` filtered by this script's own `sid`.
+  - **1.4.15**: fixed the lookup to read the field Splunk actually stores on the raw notable
+    event (`source_event_id`), not the differently-named field (`event_id`) that only exists in
+    Incident Review's own UI/KV layer for manually-invoked actions.
+  - Version bumped **1.4.15 → 1.5.0** (minor version increment, reflecting a completed, verified
+    milestone rather than a further patch-level fix).
 
 ### 1.4.15
 
