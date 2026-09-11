@@ -8,10 +8,13 @@ export = system
 
 # Whoever/whatever invokes the AR action (a correlation search's saved-search
 # owner, or the analyst running it ad hoc from Incident Review) needs WRITE
-# on this collection to persist enrichment records. Add your ES
-# analyst/admin roles here if they differ from "admin".
+# on this collection to persist enrichment records. Opened to write: [ * ]
+# (matching UnshakeableSaltLtd/splunk_apps) rather than admin-only, since the
+# correlation search's run-as identity is not guaranteed to hold the admin
+# role and a restrictive ACL here was a plausible cause of automatic AR
+# invocations silently failing to persist their enrichment record.
 [collections/notable_agentic_enrichment]
-access = read : [ * ], write : [ admin ]
+access = read : [ * ], write : [ * ]
 export = system
 
 [views/notable_agentic_enrichment_drilldown]

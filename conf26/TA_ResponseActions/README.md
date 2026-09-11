@@ -321,6 +321,20 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 
 ## Release Notes
 
+### 1.4.12
+
+- **Changed: `collections/notable_agentic_enrichment` KV store ACL relaxed to `write: [ * ]`**
+  (was `write: [ admin ]`). A correlation search's run-as identity is not guaranteed to hold the
+  `admin` role, so the previous ACL could silently block the enrichment-record write-back on
+  automatic (correlation-search-triggered) invocations while manual/ad-hoc testing (run as an
+  admin user) appeared to work fine. This now matches `UnshakeableSaltLtd/splunk_apps`, which
+  already shipped with the open ACL.
+- Reconciled this app's `default/alert_actions.conf`, `bin/ta_common.py`, and
+  `bin/notable_to_perplexity_json.py` 1:1 with `UnshakeableSaltLtd/splunk_apps` (that repo's copy
+  was previously one version behind, missing `param.concern_urgency` from 1.4.10 - now synced
+  both ways so both repos carry identical app content).
+- Version bumped **1.4.11 → 1.4.12** (increment only, per this project's versioning convention).
+
 ### 1.4.11
 
 - **Fixed: manual and automatic Adaptive Response invocations were not appearing in Incident
