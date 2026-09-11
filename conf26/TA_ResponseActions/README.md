@@ -321,6 +321,20 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 
 ## Release Notes
 
+### 1.4.11
+
+- **Fixed: manual and automatic Adaptive Response invocations were not appearing in Incident
+  Review's native "Adaptive Responses" panel.** `cim_actions.ModularAction.message()` (added in
+  1.1.0) writes invocation records to `index=cim_modactions sourcetype=modular_alerts:<action>`,
+  but Splunk's own adaptive-response-action guide requires the app to additionally declare that
+  sourcetype as an `eventtype` and tag it `modaction_result` before Enterprise Security's own
+  panel will recognize and display it - the app never shipped either file, so the panel stayed
+  empty regardless of whether the underlying action succeeded.
+- Added `default/eventtypes.conf` (defines `notable_to_perplexity_json` and
+  `notable_to_slack_json` event types over their respective `modular_alerts:*` sourcetypes) and
+  `default/tags.conf` (tags both event types `modaction_result = enabled`).
+- Version bumped **1.4.10 → 1.4.11** (increment only, per this project's versioning convention).
+
 ### 1.4.10
 
 - **Changed: urgency set when Perplexity's `concern` field is true.** Previously hardcoded to
