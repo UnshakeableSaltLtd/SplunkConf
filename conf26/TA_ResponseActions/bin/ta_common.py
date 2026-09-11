@@ -915,6 +915,117 @@ def update_notable(server_uri, session_key, event_id, log, comment=None, urgency
 
 
 # ----------------------------------------------------------------------
+# v1.4.14: resolve the event_id of the notable that action.notable creates
+# as a SIBLING action in the SAME correlation-search firing as this modular
+# action's own invocation.
+#
+# Automatic (correlation-search-triggered) invocations never carry event_id
+# on their own result row - confirmed via the v1.4.13 diagnostic dump
+# (row fields=['_time','action_notification','repo','src','user'],
+# orig_sid=None, orig_rid=None, rid=None: the row is EXACTLY and ONLY the
+# fields the search's own `table` clause selected - Splunk does NOT inject
+# orig_sid/orig_rid/rid onto it as job metadata, disproving the original
+# 1.4.13 theory that those fields would be present).
+#
+# What IS reliably available is THIS script's own `sid` (Splunk always
+# supplies it in the invocation payload - see the "Invoked: sid=..." log
+# line - since action.notable and this modular action both fire from the
+# exact same scheduled search job). Every notable action.notable creates
+# carries orig_sid/orig_rid pointing back to the sid/rid of the correlation
+# search job that spawned it, so we can look our own notable back up by
+# orig_sid (and, best-effort, orig_rid) via a oneshot search against
+# index=notable instead of relying on anything being present on our own row.
+#
+# Retries with a short delay because action.notable's own write to
+# index=notable is not guaranteed to be searchable yet in the same instant
+# this script runs (the two actions fire concurrently/sequentially within
+# the same cycle, not in a guaranteed order).
+# ----------------------------------------------------------------------
+def _oneshot_search(server_uri, session_key, spl, log, max_results=5):
+    url = f"{server_uri}/services/search/jobs/export"
+    body = urllib.parse.urlencode(
+        {"search": spl, "output_mode": "json", "count": str(max_results)}
+    ).encode("utf-8")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    req = urllib.request.Request(
+        url, data=body, method="POST", headers={"Authorization": f"Splunk {session_key}"}
+    )
+    with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
+        raw = resp.read().decode("utf-8")
+    results = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if "result" in obj:
+            results.append(obj["result"])
+    return results
+
+
+def resolve_notable_event_id(server_uri, session_key, sid, rid, log, retries=5, delay_seconds=1.0):
+    """Best-effort lookup of a just-created notable's event_id via its
+    orig_sid (and, if unambiguous, orig_rid). Returns None (never raises) if
+    nothing can be resolved after `retries` attempts, so callers can fall
+    back to skipping the write-back exactly as before."""
+    if not server_uri or not session_key or not sid:
+        return None
+    sid_esc = str(sid).replace('"', '\\"')
+    rid_esc = str(rid).replace('"', '\\"') if rid not in (None, "") else None
+    spl_with_rid = (
+        f'search index=notable orig_sid="{sid_esc}" orig_rid="{rid_esc}" | head 1 | fields event_id'
+        if rid_esc is not None else None
+    )
+    spl_sid_only = (
+        f'search index=notable orig_sid="{sid_esc}" | head 5 | fields event_id, orig_rid'
+    )
+
+    for attempt in range(1, retries + 1):
+        try:
+            if spl_with_rid:
+                results = _oneshot_search(server_uri, session_key, spl_with_rid, log)
+                if results and results[0].get("event_id"):
+                    event_id = results[0]["event_id"]
+                    log.info(
+                        "Resolved notable event_id=%s via orig_sid=%s orig_rid=%s (attempt %d/%d)",
+                        event_id, sid, rid, attempt, retries,
+                    )
+                    return event_id
+
+            # Fallback: orig_sid alone. Only act on an UNAMBIGUOUS single
+            # match - if the same sid produced multiple notables we can't
+            # safely tell which one is ours without a real orig_rid match.
+            results = _oneshot_search(server_uri, session_key, spl_sid_only, log)
+            if len(results) == 1 and results[0].get("event_id"):
+                event_id = results[0]["event_id"]
+                log.info(
+                    "Resolved notable event_id=%s via orig_sid=%s only (single unambiguous "
+                    "match, orig_rid filter found nothing; attempt %d/%d)",
+                    event_id, sid, attempt, retries,
+                )
+                return event_id
+        except Exception:
+            log.exception(
+                "resolve_notable_event_id: lookup attempt %d/%d failed for sid=%s rid=%s",
+                attempt, retries, sid, rid,
+            )
+        if attempt < retries:
+            time.sleep(delay_seconds)
+
+    log.warning(
+        "resolve_notable_event_id: no notable found for orig_sid=%s orig_rid=%s after "
+        "%d attempts (%.1fs apart)",
+        sid, rid, retries, delay_seconds,
+    )
+    return None
+
+
+# ----------------------------------------------------------------------
 # Parse a "HH:MM" config value (24h, UTC) into a datetime.time, falling back
 # to the given default - and logging a warning - on anything unparseable.
 # Used for the configurable overnight-urgency-override window bounds

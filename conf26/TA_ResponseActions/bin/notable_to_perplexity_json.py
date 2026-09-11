@@ -309,6 +309,22 @@ def main():
         #    rest of the notable in the analyst's Incident Review queue.
         if write_back_comment or urgency_to_set:
             event_id = row.get("event_id")
+            resolved_via_lookup = False
+            if not event_id:
+                # v1.4.14: automatic (correlation-search-triggered) rows never
+                # carry event_id (confirmed via the v1.4.13 diagnostic - see
+                # ta_common.resolve_notable_event_id() for the full story).
+                # Try to resolve the notable action.notable just created for
+                # THIS same firing via our own sid + best-effort rid before
+                # giving up.
+                event_id = ta_common.resolve_notable_event_id(
+                    payload.get("server_uri"),
+                    payload.get("session_key"),
+                    payload.get("sid"),
+                    row.get("rid", str(i)),
+                    log,
+                )
+                resolved_via_lookup = event_id is not None
             if event_id:
                 try:
                     ta_common.update_notable(
@@ -334,23 +350,26 @@ def main():
                     log.exception(
                         "Failed to write comment/urgency back to notable event_id=%s", event_id
                     )
+                else:
+                    if resolved_via_lookup:
+                        log.info(
+                            "row=%d: notable comment/urgency write-back succeeded using an "
+                            "event_id resolved via orig_sid/orig_rid lookup (row itself had "
+                            "no event_id - this is expected on automatic firings)",
+                            i,
+                        )
             else:
-                # v1.4.13 diagnostic: this was previously log.debug() and therefore
-                # invisible at the default log level - which made "automatic firing
-                # never writes back to the notable" look like total silence instead
-                # of the documented, deliberate skip it actually is. Bumped to
-                # warning and now also dumps the row's actual fields/orig_sid/
-                # orig_rid/rid so we can confirm whether the newly-created notable's
-                # identity can be resolved via orig_sid+orig_rid (Splunk injects
-                # these as job metadata independent of the search's own `table`
-                # clause) even though `event_id` itself never appears on a live,
-                # just-fired correlation search row - see README.md v1.4.13 notes.
+                # v1.4.14: row had no event_id AND resolve_notable_event_id()
+                # (orig_sid/orig_rid lookup against index=notable, with retry
+                # for indexing lag) could not find a match either - logged at
+                # warning by that helper already. This should now be rare;
+                # if it recurs, check whether action.notable is actually
+                # enabled/firing for this correlation search, or whether the
+                # notable is taking longer than the retry window to index.
                 log.warning(
-                    "No event_id on row=%d (not a notable-context invocation); "
-                    "skipping notable comment/urgency write-back. row fields=%s "
-                    "orig_sid=%r orig_rid=%r rid=%r",
-                    i, sorted(row.keys()), row.get("orig_sid"), row.get("orig_rid"),
-                    row.get("rid"),
+                    "No event_id on row=%d and orig_sid/orig_rid lookup did not resolve one "
+                    "either; skipping notable comment/urgency write-back. row fields=%s",
+                    i, sorted(row.keys()),
                 )
 
         # 3) Structured enrichment record in the SAME KV store collection

@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.13
+**Version:** 1.4.14
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -320,6 +320,24 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.14
+
+- **Fixed: automatic (correlation-search-triggered) Adaptive Response invocations now write
+  their comment/urgency back to the correct notable in Mission Control / Incident Review.**
+  The 1.4.13 diagnostic disproved its own theory: automatic rows carry `orig_sid=None`,
+  `orig_rid=None`, `rid=None` - the row is exactly and only the fields the correlation search's
+  own `table` clause selected, with no Splunk-injected job metadata riding along. What IS always
+  available is this script's own `sid` (Splunk supplies it in every invocation's payload, logged
+  as `Invoked: sid=...`), since `action.notable` and this modular action both fire from the exact
+  same scheduled search job. Every notable `action.notable` creates carries `orig_sid`/`orig_rid`
+  pointing back to that same job, so when a row has no `event_id`, the script now looks the
+  just-created notable up via a oneshot search against `index=notable` filtered on `orig_sid`
+  (and, best-effort, `orig_rid`), with a short retry for indexing lag - new helper
+  `ta_common.resolve_notable_event_id()`. Falls back to an unambiguous single-match-by-`orig_sid`
+  lookup if the `orig_rid` filter finds nothing, and gives up cleanly (same skip-and-log behaviour
+  as before) if nothing can be resolved after all retries.
+- Version bumped **1.4.13 → 1.4.14** (increment only, per this project's versioning convention).
 
 ### 1.4.13
 
