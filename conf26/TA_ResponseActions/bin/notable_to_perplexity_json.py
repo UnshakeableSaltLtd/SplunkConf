@@ -335,10 +335,22 @@ def main():
                         "Failed to write comment/urgency back to notable event_id=%s", event_id
                     )
             else:
-                log.debug(
+                # v1.4.13 diagnostic: this was previously log.debug() and therefore
+                # invisible at the default log level - which made "automatic firing
+                # never writes back to the notable" look like total silence instead
+                # of the documented, deliberate skip it actually is. Bumped to
+                # warning and now also dumps the row's actual fields/orig_sid/
+                # orig_rid/rid so we can confirm whether the newly-created notable's
+                # identity can be resolved via orig_sid+orig_rid (Splunk injects
+                # these as job metadata independent of the search's own `table`
+                # clause) even though `event_id` itself never appears on a live,
+                # just-fired correlation search row - see README.md v1.4.13 notes.
+                log.warning(
                     "No event_id on row=%d (not a notable-context invocation); "
-                    "skipping notable comment/urgency write-back",
-                    i,
+                    "skipping notable comment/urgency write-back. row fields=%s "
+                    "orig_sid=%r orig_rid=%r rid=%r",
+                    i, sorted(row.keys()), row.get("orig_sid"), row.get("orig_rid"),
+                    row.get("rid"),
                 )
 
         # 3) Structured enrichment record in the SAME KV store collection

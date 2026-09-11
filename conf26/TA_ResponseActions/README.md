@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.10
+**Version:** 1.4.13
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -320,6 +320,26 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.13
+
+- **Diagnostic: the "no event_id" notable comment/urgency write-back skip is now logged at
+  `warning` level (was `debug`, invisible at the default log level).** Automatic
+  (correlation-search-triggered) invocations run directly off the correlation search's own live
+  SPL results - which never contain `event_id`, both because the notable this action is meant to
+  update doesn't exist yet at search-execution time (it's created as a side effect of the
+  built-in `notable` action firing in the same cycle), and because a `table`-terminated search
+  would strip the field even if it somehow existed. Manual re-runs from Incident Review act on an
+  already-indexed notable event (which always carries a real `event_id`), so they always looked
+  fine while automatic firing silently skipped its own write-back with zero log trace. The
+  warning now also dumps the row's available fields plus `orig_sid`/`orig_rid`/`rid`, since those
+  are Splunk-injected job metadata (present regardless of the search's own `table`/`fields`
+  clause) and every notable event carries the same `orig_sid`/`orig_rid` pointing back to the
+  search that created it - the planned follow-up fix is to resolve the newly-created notable's
+  real `event_id` via an `index=notable orig_sid=<val> orig_rid=<val>` lookup (with a short retry
+  for indexing lag) before attempting the write-back, once this diagnostic confirms those fields
+  are actually populated on a live automatic invocation.
+- Version bumped **1.4.12 → 1.4.13** (increment only, per this project's versioning convention).
 
 ### 1.4.12
 
