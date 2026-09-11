@@ -977,20 +977,28 @@ def resolve_notable_event_id(server_uri, session_key, sid, rid, log, retries=5, 
         return None
     sid_esc = str(sid).replace('"', '\\"')
     rid_esc = str(rid).replace('"', '\\"') if rid not in (None, "") else None
+    # NOTE: the raw index=notable event does NOT carry a field literally
+    # named "event_id" - that name only appears when Incident Review's own
+    # UI/KV layer hands a row to a manually-invoked adaptive response action.
+    # The genuinely indexed field on the raw notable event is
+    # "source_event_id" (confirmed via `index=notable | table *` against a
+    # live automatic firing - format e.g.
+    # "<uuid>@@notable@@time<epoch>", matching the manual-case event_id
+    # format exactly). Always select/read source_event_id here.
     spl_with_rid = (
-        f'search index=notable orig_sid="{sid_esc}" orig_rid="{rid_esc}" | head 1 | fields event_id'
+        f'search index=notable orig_sid="{sid_esc}" orig_rid="{rid_esc}" | head 1 | fields source_event_id'
         if rid_esc is not None else None
     )
     spl_sid_only = (
-        f'search index=notable orig_sid="{sid_esc}" | head 5 | fields event_id, orig_rid'
+        f'search index=notable orig_sid="{sid_esc}" | head 5 | fields source_event_id, orig_rid'
     )
 
     for attempt in range(1, retries + 1):
         try:
             if spl_with_rid:
                 results = _oneshot_search(server_uri, session_key, spl_with_rid, log)
-                if results and results[0].get("event_id"):
-                    event_id = results[0]["event_id"]
+                if results and results[0].get("source_event_id"):
+                    event_id = results[0]["source_event_id"]
                     log.info(
                         "Resolved notable event_id=%s via orig_sid=%s orig_rid=%s (attempt %d/%d)",
                         event_id, sid, rid, attempt, retries,
@@ -1001,8 +1009,8 @@ def resolve_notable_event_id(server_uri, session_key, sid, rid, log, retries=5, 
             # match - if the same sid produced multiple notables we can't
             # safely tell which one is ours without a real orig_rid match.
             results = _oneshot_search(server_uri, session_key, spl_sid_only, log)
-            if len(results) == 1 and results[0].get("event_id"):
-                event_id = results[0]["event_id"]
+            if len(results) == 1 and results[0].get("source_event_id"):
+                event_id = results[0]["source_event_id"]
                 log.info(
                     "Resolved notable event_id=%s via orig_sid=%s only (single unambiguous "
                     "match, orig_rid filter found nothing; attempt %d/%d)",

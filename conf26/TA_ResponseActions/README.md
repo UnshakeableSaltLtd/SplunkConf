@@ -1,7 +1,7 @@
 # TA_ResponseActions
 
 **App Name:** Notable to Perplexity / Slack
-**Version:** 1.4.14
+**Version:** 1.4.15
 **Author:** David Pollard, Unshakeable Salt Ltd
 **Associated Session:** [SEC1215 — From Zero to Agentic](../SEC1215/README.md)
 
@@ -320,6 +320,22 @@ Logs: `$SPLUNK_HOME/var/log/splunk/notable_to_perplexity_json.log` and
 `$SPLUNK_HOME/var/log/splunk/notable_to_slack_json.log` (separate files since 1.4.0).
 
 ## Release Notes
+
+### 1.4.15
+
+- **Fixed: the 1.4.14 lookup was querying the wrong field name, so it never actually resolved
+  anything.** Live diagnostic evidence (`index=notable | table *` against a real automatic
+  firing) showed `orig_sid`/`orig_rid` matched perfectly and indexing lag was only ~3 seconds
+  (well inside the 5-attempt/1s retry window) - so the filter logic was right, but every row's
+  `event_id` field came back empty. The raw `index=notable` event does not carry a field
+  literally named `event_id` at all; that name only appears when Incident Review's own UI/KV
+  layer hands a row to a manually-invoked adaptive response action. The genuinely indexed field
+  is `source_event_id` (confirmed live: format `<uuid>@@notable@@time<epoch>`, matching the
+  manual-case `event_id` value format exactly). `ta_common.resolve_notable_event_id()` now
+  selects and reads `source_event_id` instead of `event_id` in both the orig_sid+orig_rid and
+  orig_sid-only lookup queries. Re-verified against 6 offline mocked scenarios, including a
+  direct replay of the real sid/rid values and resolved value from the live log evidence.
+- Version bumped **1.4.14 → 1.4.15** (increment only, per this project's versioning convention).
 
 ### 1.4.14
 
