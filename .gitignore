@@ -1,0 +1,143 @@
+# gitignore - Standard build for Unshakeable Salt Ltd
+# 
+# Version 1.0.0 Release
+# 2026-07-16 
+
+# Version control
+.git/
+.svn/
+.hg/
+.bzr/
+.worktrees/
+
+# OS and file system artifacts
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Secrets and sensitive data
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+pass-ansible.txt
+.vault-password
+*.retry
+
+# Python, pip, and scripting artifacts
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+*.egg
+*.egg-info/
+.Python
+.eggs/
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+*.manifest
+*.spec
+# Splunk app config spec files (e.g. README/alert_actions.conf.spec) are a
+# Splunk convention, not PyInstaller build artifacts - keep them tracked.
+!**/README/*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+__pypackages__/
+*.mo
+*.pot
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+.scrapy
+target/
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+.spyderproject
+.spyproject
+.ropeproject
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+*.ps1xml
+Release/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs, temporary files, and generated output
+*.log
+npm-debug.log*
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Node tooling
+node_modules/
+
+# Misc generated files and stuff we just dont want you to see
+*.so
+*.sage.py
+/site
+scratchpad/

@@ -1,0 +1,11 @@
+{"perplexity_ask": 
+    {"repository_check": "Check that $result.repo$ is a repository we commonly see associated with this type of finding.",
+    "user_check": "Check that $result.user$ is an expected/authorized user for this kind of activity.",
+    "source_ip_check": "Check that source IP $result.src$ is low threat (not on any known malicious/blocklist sources)."
+    }
+}
+
+
+
+
+

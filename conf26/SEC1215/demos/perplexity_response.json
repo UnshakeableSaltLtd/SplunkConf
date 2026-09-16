@@ -1,0 +1,35 @@
+{ "source": "splunk_es_adaptive_response",
+  "action": "notable_to_perplexity_json",
+  "sent_at": "2026-08-03T10:31:36Z",
+  "search_name": "Test Harness Sample Finding",
+  "sid": "test-harness-notable_to_perplexity_json-1785753096",
+  "app": "search",
+  "owner": "admin",
+  "results_link": "",
+  "server_host": "localhost",
+  "notable": {
+    "event_id": "5B2F1B0A-0000-0000-0000-TESTHARNESS01",
+    "rule_name": "Test Harness Sample Finding",
+    "search_name": "Test Harness Sample Finding",
+    "repo": "UnshakeableSaltLtd/SplunkConf",
+    "user": "dpollard",
+    "src": "203.0.113.42",
+    "dest": "10.0.0.5",
+    "signature": "Sample Finding (test_harness.py)",
+    "urgency": "medium"
+  },
+  "additional_fields": {
+    "perplexity_ask": {
+      "repository_check": "Check that UnshakeableSaltLtd/SplunkConf is a repository we commonly see associated with this type of finding.",
+      "user_check": "Check that dpollard is an expected/authorized user for this kind of activity.",
+      "source_ip_check": "Check that source IP 203.0.113.42 is low threat (not on any known malicious/blocklist sources)."
+    },
+    "perplexity_response": {
+      "repository_check": "UnshakeableSaltLtd/SplunkConf is a private internal repo owned by the organization, not a public/third-party repo commonly linked to this finding type; no reputation concerns found.",
+      "user_check": "dpollard is a recognized internal user with prior legitimate activity against this repository; no anomaly detected for this action type.",
+      "source_ip_check": "203.0.113.42 falls in the TEST-NET-3 documentation range (RFC 5737) and is not a real routable/malicious address; treat as low threat only because it is a non-production placeholder IP.",
+      "overall": "No indicators of compromise: the repo and user are both expected/authorized, and the source IP is a benign documentation-range placeholder rather than a real threat source. Low risk overall; no analyst follow-up required beyond routine review."
+    }
+  }
+}
+

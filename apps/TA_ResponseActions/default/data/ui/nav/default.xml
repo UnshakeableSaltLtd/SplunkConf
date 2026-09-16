@@ -1,0 +1,5 @@
+<nav search_view="search" color="#5CC05C">
+  <view name="readme" default="true" />
+  <view name="notable_agentic_enrichment_drilldown" />
+  <view name="search" />
+</nav>

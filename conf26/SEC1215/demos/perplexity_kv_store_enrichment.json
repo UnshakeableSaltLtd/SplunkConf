@@ -1,0 +1,15 @@
+{
+  "sid": "test-harness-notable_to_perplexity_json-1785753096",
+  "rid": "0",
+  "orig_sid": "",
+  "orig_rid": "",
+  "event_id": "5B2F1B0A-0000-0000-0000-TESTHARNESS01",
+  "sent_at": "2026-08-03T10:31:36Z",
+  "delivery_method": "perplexity_api",
+  "slack_channel": "",
+  "slack_permalink": "",
+  "additional_fields": "{\"perplexity_ask\": {...}, \"perplexity_response\": {...}}",
+  "status": "success",
+  "error": ""
+}
+
